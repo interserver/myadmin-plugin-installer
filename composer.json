@@ -1,0 +1,22 @@
+{
+    "name": "detain/myadmin_composer_plugin",
+    "description": "A composer plugin to handle the various types of 3rd party software we deal with in MyAdmin",
+    "type": "composer-plugin",
+    "license": "GPL",
+    "authors": [
+        {
+            "name": "Joe Huss",
+            "email": "detain@interserver.net"
+        }
+    ],
+    "autoload"": {
+        "psr-0": {"detain\\": "include/"}
+    },
+    "require": {
+        "composer-plugin-api": "^1.0"
+    },
+    "extra": {
+         "class":  "detain\\Composer\\TemplateInstallerPlugin""
+    },
+    "minimum-stability": "dev"
+}
