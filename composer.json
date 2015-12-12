@@ -10,13 +10,13 @@
         }
     ],
     "autoload": {
-        "psr-0": {"detain\\": "include/"}
+        "psr-0": {"MyAdmin\\": "include/"}
     },
     "require": {
         "composer-plugin-api": "^1.0"
     },
     "extra": {
-         "class":  "detain\\Composer\\TemplateInstallerPlugin"
+         "class":  "MyAdmin\\Composer\\TemplateInstallerPlugin"
     },
     "minimum-stability": "dev"
 }
