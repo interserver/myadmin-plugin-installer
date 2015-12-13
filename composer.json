@@ -10,7 +10,7 @@
         }
     ],
     "autoload": {
-        "psr-0": {"MyAdmin\\": "include/"}
+        "psr-0": {"MyAdmin\\Composer": "include/"}
     },
     "require": {
         "composer-plugin-api": "^1.0"
