@@ -17,6 +17,5 @@
     },
     "extra": {
          "class":  "MyAdmin\\Composer\\TemplateInstallerPlugin"
-    },
-    "minimum-stability": "dev"
+    }
 }
