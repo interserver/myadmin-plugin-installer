@@ -1,6 +1,5 @@
 <?php
-
-namespace MyAdmin\Composer;
+namespace MyAdmin\Composer\TemplateInstallerPlugin;
 
 use Composer\Composer;
 use Composer\IO\IOInterface;
