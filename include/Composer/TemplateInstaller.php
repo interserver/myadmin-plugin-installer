@@ -10,7 +10,7 @@ uninstall(), here you can determine the actions that need to be executed when th
 getInstallPath(), this method should return the location where the package is to be installed, relative from the location of composer.json.
 */
 
-namespace MyAdmin\Composer;
+namespace MyAdmin\Composer\TemplateInstaller;
 
 use Composer\Package\PackageInterface;
 use Composer\Installer\LibraryInstaller;
