@@ -1,6 +1,6 @@
 <?php
 /**
- * Template Installer Plugin
+ * MyAdmin Installer Plugin
  *
  * The InstallerInterface class defines the following methods (please see the source for the exact signature):
  *   supports(), here you test whether the passed type matches the name that you declared for this installer (see the example).
@@ -14,31 +14,83 @@
  * 
  */
 
-namespace detain\myAdmin\Composer;
+namespace detain\myAdmin\Plugins;
 
 use Composer\Package\PackageInterface;
 use Composer\Installer\LibraryInstaller;
 
-class TemplateInstaller extends LibraryInstaller
+class Installer extends LibraryInstaller
 {
-    /**
-     * {@inheritDoc}
-     */
-    public function getInstallPath(PackageInterface $package)
-    {
+	/**
+	 * Returns the installation path of a package
+	 *
+	 * @param  PackageInterface $package
+	 * @return string           path
+	 */
+	public function getInstallPath(PackageInterface $package)
+	{
 	$strip = 'myadmin/template-';
 	$cut = strlen($strip) - 1;
-        $prefix = substr($package->getPrettyName(), 0, $cut);
-        if ($strip !== $prefix)
-            throw new \InvalidArgumentException("Unable to install template, myadmin templates should always start their package name with '{$strip}'");
-        return 'public_html/templates/'.substr($package->getPrettyName(), $cut);
-    }
+		$prefix = substr($package->getPrettyName(), 0, $cut);
+		if ($strip !== $prefix)
+			throw new \InvalidArgumentException("Unable to install template, myadmin templates should always start their package name with '{$strip}'");
+		return 'public_html/templates/'.substr($package->getPrettyName(), $cut);
+	}
 
-    /**
-     * {@inheritDoc}
-     */
-    public function supports($packageType)
-    {
-        return 'myadmin-template' === $packageType;
-    }
+	/**
+	 * Decides if the installer supports the given type
+	 *
+	 * @param  string $packageType
+	 * @return bool
+	 */
+	public function supports($packageType)
+	{
+		return 'myadmin-template' === $packageType;
+	}
+
+	/**
+	 * Checks that provided package is installed.
+	 *
+	 * @param InstalledRepositoryInterface $repo    repository in which to check
+	 * @param PackageInterface             $package package instance
+	 *
+	 * @return bool
+	 */
+	public function isInstalled(InstalledRepositoryInterface $repo, PackageInterface $package) {
+		parent::isInstalled($repo, $package);
+	}
+
+	/**
+	 * Installs specific package.
+	 *
+	 * @param InstalledRepositoryInterface $repo    repository in which to check
+	 * @param PackageInterface             $package package instance
+	 */
+	public function install(InstalledRepositoryInterface $repo, PackageInterface $package) {
+		parent::install($repo, $package);
+	}
+
+	/**
+	 * Updates specific package.
+	 *
+	 * @param InstalledRepositoryInterface $repo    repository in which to check
+	 * @param PackageInterface             $initial already installed package version
+	 * @param PackageInterface             $target  updated version
+	 *
+	 * @throws InvalidArgumentException if $initial package is not installed
+	 */
+	public function update(InstalledRepositoryInterface $repo, PackageInterface $initial, PackageInterface $target) {
+		parent::update($repo, $initial, $target);
+	}
+
+	/**
+	 * Uninstalls specific package.
+	 *
+	 * @param InstalledRepositoryInterface $repo    repository in which to check
+	 * @param PackageInterface             $package package instance
+	 */
+	public function uninstall(InstalledRepositoryInterface $repo, PackageInterface $package) {
+		parent::uninstall($repo, $package);
+	}
+
 }

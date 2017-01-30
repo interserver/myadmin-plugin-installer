@@ -1,20 +1,29 @@
 <?php
 /**
- * Template Installer Plugin
+ * MyAdmin Installer Plugin
  * Implements https://github.com/composer/composer/blob/master/src/Composer/Plugin/PluginInterface.php
  */
 
-namespace detain\myAdmin\Composer;
+namespace detain\myAdmin\Plugins;
 
 use Composer\Composer;
 use Composer\IO\IOInterface;
 use Composer\Plugin\PluginInterface;
 
+/**
+ * MyAdmin Installer Plugin
+ */
 class TemplateInstallerPlugin implements PluginInterface
 {
-    public function activate(Composer $composer, IOInterface $io)
-    {
-        $installer = new TemplateInstaller($io, $composer);
-        $composer->getInstallationManager()->addInstaller($installer);
-    }
+	/**
+	 * Apply plugin modifications to Composer
+	 *
+	 * @param Composer    $composer
+	 * @param IOInterface $io
+	 */
+	public function activate(Composer $composer, IOInterface $io)
+	{
+		$installer = new TemplateInstaller($io, $composer);
+		$composer->getInstallationManager()->addInstaller($installer);
+	}
 }
