@@ -24,10 +24,10 @@ class Installer extends LibraryInstaller
 	/**
 	 * Returns the installation path of a package
 	 *
-	 * @param  PackageInterface $package
+	 * @param  Composer\Package\PackageInterface $package
 	 * @return string           path
 	 */
-	public function getInstallPath(PackageInterface $package)
+	public function getInstallPath(Composer\Package\PackageInterface $package)
 	{
 	$strip = 'myadmin/template-';
 	$cut = strlen($strip) - 1;
@@ -51,45 +51,45 @@ class Installer extends LibraryInstaller
 	/**
 	 * Checks that provided package is installed.
 	 *
-	 * @param InstalledRepositoryInterface $repo    repository in which to check
-	 * @param PackageInterface             $package package instance
+	 * @param Composer\Repository\InstalledRepositoryInterface $repo    repository in which to check
+	 * @param Composer\Package\PackageInterface             $package package instance
 	 *
 	 * @return bool
 	 */
-	public function isInstalled(InstalledRepositoryInterface $repo, PackageInterface $package) {
+	public function isInstalled(Composer\Repository\InstalledRepositoryInterface $repo, Composer\Package\PackageInterface $package) {
 		parent::isInstalled($repo, $package);
 	}
 
 	/**
 	 * Installs specific package.
 	 *
-	 * @param InstalledRepositoryInterface $repo    repository in which to check
-	 * @param PackageInterface             $package package instance
+	 * @param Composer\Repository\InstalledRepositoryInterface $repo    repository in which to check
+	 * @param Composer\Package\PackageInterface             $package package instance
 	 */
-	public function install(InstalledRepositoryInterface $repo, PackageInterface $package) {
+	public function install(Composer\Repository\InstalledRepositoryInterface $repo, Composer\Package\PackageInterface $package) {
 		parent::install($repo, $package);
 	}
 
 	/**
 	 * Updates specific package.
 	 *
-	 * @param InstalledRepositoryInterface $repo    repository in which to check
-	 * @param PackageInterface             $initial already installed package version
-	 * @param PackageInterface             $target  updated version
+	 * @param Composer\Repository\InstalledRepositoryInterface $repo    repository in which to check
+	 * @param Composer\Package\PackageInterface             $initial already installed package version
+	 * @param Composer\Package\PackageInterface             $target  updated version
 	 *
 	 * @throws InvalidArgumentException if $initial package is not installed
 	 */
-	public function update(InstalledRepositoryInterface $repo, PackageInterface $initial, PackageInterface $target) {
+	public function update(Composer\Repository\InstalledRepositoryInterface $repo, Composer\Package\PackageInterface $initial, Composer\Package\PackageInterface $target) {
 		parent::update($repo, $initial, $target);
 	}
 
 	/**
 	 * Uninstalls specific package.
 	 *
-	 * @param InstalledRepositoryInterface $repo    repository in which to check
-	 * @param PackageInterface             $package package instance
+	 * @param Composer\Repository\InstalledRepositoryInterface $repo    repository in which to check
+	 * @param Composer\Package\PackageInterface             $package package instance
 	 */
-	public function uninstall(InstalledRepositoryInterface $repo, PackageInterface $package) {
+	public function uninstall(Composer\Repository\InstalledRepositoryInterface $repo, Composer\Package\PackageInterface $package) {
 		parent::uninstall($repo, $package);
 	}
 
