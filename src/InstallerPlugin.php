@@ -13,7 +13,7 @@ use Composer\Plugin\PluginInterface;
 /**
  * MyAdmin Installer Plugin
  */
-class TemplateInstallerPlugin implements PluginInterface
+class InstallerPlugin implements PluginInterface
 {
 	/**
 	 * Apply plugin modifications to Composer
@@ -23,7 +23,7 @@ class TemplateInstallerPlugin implements PluginInterface
 	 */
 	public function activate(Composer $composer, IOInterface $io)
 	{
-		$installer = new TemplateInstaller($io, $composer);
+		$installer = new Installer($io, $composer);
 		$composer->getInstallationManager()->addInstaller($installer);
 	}
 }
