@@ -36,6 +36,13 @@ class MyPlugins implements PluginInterface, EventSubscriberInterface, Capable {
 		$this->composer->getInstallationManager()->addInstaller($installer);
 	}
 
+    public function getCapabilities()
+    {
+        return array(
+            'Composer\Plugin\Capability\CommandProvider' => 'MyAdmin\Plugins\CommandProvider',
+        );
+    }
+
 	public static function getSubscribedEvents()
 	{
 		return array(
