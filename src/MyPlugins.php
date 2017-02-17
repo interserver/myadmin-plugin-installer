@@ -32,7 +32,7 @@ class MyPlugins implements PluginInterface, EventSubscriberInterface, Capable {
 		$this->io = $io;
 		print "Hello peoples...";
 
-		$installer = new MyPluginsInstaller($this->io, $this->composer);
+		$installer = new MyInstaller($this->io, $this->composer);
 		$this->composer->getInstallationManager()->addInstaller($installer);
 	}
 
