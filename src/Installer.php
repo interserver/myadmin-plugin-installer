@@ -1,6 +1,6 @@
 <?php
 /**
- * MyAdmin MyInstaller Plugin
+ * MyAdmin Installer Plugin
  *
  * The InstallerInterface class defines the following methods (please see the source for the exact signature):
  *   supports(), here you test whether the passed type matches the name that you declared for this installer (see the example).
@@ -19,7 +19,7 @@ namespace MyAdmin\Plugins;
 use Composer\Package\PackageInterface;
 use Composer\Installer\LibraryInstaller;
 
-class MyInstaller extends LibraryInstaller {
+class Installer extends LibraryInstaller {
     protected $composer;
     protected $vendorDir;
     protected $binDir;

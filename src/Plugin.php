@@ -17,7 +17,7 @@ use Composer\Plugin\PreFileDownloadEvent;
 /**
  * MyAdmin Installer Plugin
  */
-class MyPlugins implements PluginInterface, EventSubscriberInterface, Capable {
+class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	protected $composer;
 	protected $io;
 	

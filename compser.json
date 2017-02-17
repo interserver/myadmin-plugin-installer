@@ -1,0 +1,14 @@
+{
+    "name": "myadmin/template-installer-plugin",
+    "type": "composer-plugin",
+    "license": "MIT",
+    "autoload": {
+        "psr-0": {"myAdmin\\Composer": "src/"}
+    },
+    "extra": {
+        "class": "myAdmin\\Composer\\TemplateInstallerPlugin"
+    },
+    "require": {
+        "composer-plugin-api": "^1.0"
+    }
+}
