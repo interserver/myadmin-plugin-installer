@@ -59,8 +59,14 @@ class MyInstaller extends LibraryInstaller {
         //return $packageType === $this->type || null === $this->type;
     }
 
+
     /**
-     * {@inheritDoc}
+     * Checks that provided package is installed.
+     *
+     * @param InstalledRepositoryInterface $repo    repository in which to check
+     * @param PackageInterface             $package package instance
+     *
+     * @return bool
      */
     public function isInstalled(InstalledRepositoryInterface $repo, PackageInterface $package)
     {
