@@ -70,7 +70,8 @@ class MyInstaller extends LibraryInstaller {
      */
     public function isInstalled(InstalledRepositoryInterface $repo, PackageInterface $package)
     {
-        return $repo->hasPackage($package) && is_readable($this->getInstallPath($package));
+	return parent::isInstalled($repo, $package);
+        //return $repo->hasPackage($package) && is_readable($this->getInstallPath($package));
     }
 
     /**
