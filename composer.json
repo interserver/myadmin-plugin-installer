@@ -1,9 +1,10 @@
 {
     "name": "detain/myadmin-plugin-installer",
+    "description": "Composer backed plugin handler and installer for MyAdmin",
     "type": "composer-plugin",
     "license": "MIT",
     "autoload": {
-        "psr-0": {"myAdmin\\Composer": "src/"}
+        "psr-4": {"myAdmin\\Composer\\": "src/"}
     },
     "extra": {
         "class": "myAdmin\\Composer\\TemplateInstallerPlugin"
