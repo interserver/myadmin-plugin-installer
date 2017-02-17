@@ -1,6 +1,6 @@
 <?php
 /**
- * MyAdmin Installer Plugin
+ * MyAdmin MyInstaller Plugin
  *
  * The InstallerInterface class defines the following methods (please see the source for the exact signature):
  *   supports(), here you test whether the passed type matches the name that you declared for this installer (see the example).
@@ -14,23 +14,21 @@
  * 
  */
 
-namespace detain\myAdmin\Plugins;
+namespace MyAdmin\Plugins;
 
 use Composer\Package\PackageInterface;
 use Composer\Installer\LibraryInstaller;
 
-class Installer extends LibraryInstaller
-{
+class MyInstaller extends LibraryInstaller {
 	/**
 	 * Returns the installation path of a package
 	 *
-	 * @param  Composer\Package\PackageInterface $package
-	 * @return string           path
+	 * @param  PackageInterface $package
+	 * @return string		   path
 	 */
-	public function getInstallPath(Composer\Package\PackageInterface $package)
-	{
-	$strip = 'myadmin/template-';
-	$cut = strlen($strip) - 1;
+	public function getInstallPath(PackageInterface $package) {
+		$strip = 'myadmin/template-';
+		$cut = strlen($strip) - 1;
 		$prefix = substr($package->getPrettyName(), 0, $cut);
 		if ($strip !== $prefix)
 			throw new \InvalidArgumentException("Unable to install template, myadmin templates should always start their package name with '{$strip}'");
@@ -43,53 +41,52 @@ class Installer extends LibraryInstaller
 	 * @param  string $packageType
 	 * @return bool
 	 */
-	public function supports($packageType)
-	{
+	public function supports($packageType) {
 		return 'myadmin-template' === $packageType;
 	}
 
 	/**
 	 * Checks that provided package is installed.
 	 *
-	 * @param Composer\Repository\InstalledRepositoryInterface $repo    repository in which to check
-	 * @param Composer\Package\PackageInterface             $package package instance
+	 * @param InstalledRepositoryInterface $repo	repository in which to check
+	 * @param PackageInterface			 $package package instance
 	 *
 	 * @return bool
 	 */
-	public function isInstalled(Composer\Repository\InstalledRepositoryInterface $repo, Composer\Package\PackageInterface $package) {
+	public function isInstalled(InstalledRepositoryInterface $repo, PackageInterface $package) {
 		parent::isInstalled($repo, $package);
 	}
 
 	/**
 	 * Installs specific package.
 	 *
-	 * @param Composer\Repository\InstalledRepositoryInterface $repo    repository in which to check
-	 * @param Composer\Package\PackageInterface             $package package instance
+	 * @param InstalledRepositoryInterface $repo	repository in which to check
+	 * @param PackageInterface			 $package package instance
 	 */
-	public function install(Composer\Repository\InstalledRepositoryInterface $repo, Composer\Package\PackageInterface $package) {
+	public function install(InstalledRepositoryInterface $repo, PackageInterface $package) {
 		parent::install($repo, $package);
 	}
 
 	/**
 	 * Updates specific package.
 	 *
-	 * @param Composer\Repository\InstalledRepositoryInterface $repo    repository in which to check
-	 * @param Composer\Package\PackageInterface             $initial already installed package version
-	 * @param Composer\Package\PackageInterface             $target  updated version
+	 * @param InstalledRepositoryInterface $repo	repository in which to check
+	 * @param PackageInterface			 $initial already installed package version
+	 * @param PackageInterface			 $target  updated version
 	 *
 	 * @throws InvalidArgumentException if $initial package is not installed
 	 */
-	public function update(Composer\Repository\InstalledRepositoryInterface $repo, Composer\Package\PackageInterface $initial, Composer\Package\PackageInterface $target) {
+	public function update(InstalledRepositoryInterface $repo, PackageInterface $initial, PackageInterface $target) {
 		parent::update($repo, $initial, $target);
 	}
 
 	/**
 	 * Uninstalls specific package.
 	 *
-	 * @param Composer\Repository\InstalledRepositoryInterface $repo    repository in which to check
-	 * @param Composer\Package\PackageInterface             $package package instance
+	 * @param InstalledRepositoryInterface $repo	repository in which to check
+	 * @param PackageInterface			 $package package instance
 	 */
-	public function uninstall(Composer\Repository\InstalledRepositoryInterface $repo, Composer\Package\PackageInterface $package) {
+	public function uninstall(InstalledRepositoryInterface $repo, PackageInterface $package) {
 		parent::uninstall($repo, $package);
 	}
 
