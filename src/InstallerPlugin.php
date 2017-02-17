@@ -16,13 +16,6 @@ use Composer\Plugin\PluginInterface;
 class InstallerPlugin implements PluginInterface
 {
 	/**
-	 * Version number of the internal composer-plugin-api package
-	 *
-	 * @var string
-	 */
-	const PLUGIN_API_VERSION = '1.1.0';
-
-	/**
 	 * Apply plugin modifications to Composer
 	 *
 	 * @param Composer\Composer	$composer
