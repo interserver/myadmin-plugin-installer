@@ -1,5 +1,5 @@
 {
-    "name": "myadmin/template-installer-plugin",
+    "name": "detain/myadmin-plugin-installer",
     "type": "composer-plugin",
     "license": "MIT",
     "autoload": {
