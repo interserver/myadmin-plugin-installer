@@ -12,7 +12,7 @@ class TemplateInstaller extends LibraryInstaller
      */
     public function getInstallPath(PackageInterface $package)
     {
-        $prefix = substr($package->getPrettyName(), 0, 23);
+        $prefix = mb_substr($package->getPrettyName(), 0, 23);
         if ('myadmin/template-' !== $prefix) {
             throw new \InvalidArgumentException(
                 'Unable to install template, myadmin templates '
@@ -21,7 +21,7 @@ class TemplateInstaller extends LibraryInstaller
             );
         }
 
-        return 'data/templates/'.substr($package->getPrettyName(), 23);
+        return 'data/templates/'.mb_substr($package->getPrettyName(), 23);
     }
 
     /**

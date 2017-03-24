@@ -120,7 +120,7 @@ class Installer extends LibraryInstaller {
         $this->binaryInstaller->removeBinaries($package);
         $repo->removePackage($package);
         $downloadPath = $this->getPackageBasePath($package);
-        if (strpos($package->getName(), '/')) {
+        if (mb_strpos($package->getName(), '/')) {
             $packageVendorDir = dirname($downloadPath);
             if (is_dir($packageVendorDir) && $this->filesystem->isDirEmpty($packageVendorDir)) {
                 Silencer::call('rmdir', $packageVendorDir);
@@ -181,8 +181,8 @@ class Installer extends LibraryInstaller {
         if ($targetDownloadPath !== $initialDownloadPath) {
             // if the target and initial dirs intersect, we force a remove + install
             // to avoid the rename wiping the target dir as part of the initial dir cleanup
-            if (substr($initialDownloadPath, 0, strlen($targetDownloadPath)) === $targetDownloadPath
-                || substr($targetDownloadPath, 0, strlen($initialDownloadPath)) === $initialDownloadPath
+            if (mb_substr($initialDownloadPath, 0, mb_strlen($targetDownloadPath)) === $targetDownloadPath
+                || mb_substr($targetDownloadPath, 0, mb_strlen($initialDownloadPath)) === $initialDownloadPath
             ) {
                 $this->removeCode($initial);
                 $this->installCode($target);
