@@ -22,6 +22,7 @@ use Composer\Installer\LibraryInstaller;
 class Installer extends LibraryInstaller {
     protected $composer;
     protected $vendorDir;
+    protected $templateDir;
     protected $binDir;
     protected $downloadManager;
     protected $io;
@@ -47,6 +48,7 @@ class Installer extends LibraryInstaller {
         $this->type = $type;
         $this->filesystem = $filesystem ?: new Filesystem();
         $this->vendorDir = rtrim($composer->getConfig()->get('vendor-dir'), '/');
+	$this->templateDir = $this->vendorDir . '/../public_html/templates';
         $this->binaryInstaller = $binaryInstaller ?: new BinaryInstaller($this->io, rtrim($composer->getConfig()->get('bin-dir'), '/'), $composer->getConfig()->get('bin-compat'), $this->filesystem);
     }
 
@@ -55,7 +57,12 @@ class Installer extends LibraryInstaller {
      */
     public function supports($packageType)
     {
-	return 'myadmin-template' === $packageType;
+	return in_array($packageType, [
+		'myadmin-template',
+		'myadmin-module',
+		'myadmin-plugin',
+		'myadmin-menu',
+	]);
         //return $packageType === $this->type || null === $this->type;
     }
 
@@ -133,8 +140,13 @@ class Installer extends LibraryInstaller {
      */
     public function getInstallPath(PackageInterface $package)
     {
-        $this->initializeVendorDir();
-        $basePath = ($this->vendorDir ? $this->vendorDir.'/' : '') . $package->getPrettyName();
+	if ($this->type == 'myadmin-template') {
+        	$this->initializeTemplateDir();
+	        $basePath = ($this->templateDir ? $this->templateDir.'/' : '') . $package->getPrettyName();
+	} else {
+        	$this->initializeVendorDir();
+	        $basePath = ($this->vendorDir ? $this->vendorDir.'/' : '') . $package->getPrettyName();
+	}
         $targetDir = $package->getTargetDir();
         return $basePath . ($targetDir ? '/'.$targetDir : '');
     }
@@ -201,5 +213,10 @@ class Installer extends LibraryInstaller {
     {
         $this->filesystem->ensureDirectoryExists($this->vendorDir);
         $this->vendorDir = realpath($this->vendorDir);
+    }
+    protected function initializeTemplateDir()
+    {
+        $this->filesystem->ensureDirectoryExists($this->templateDir);
+        $this->templateDir = realpath($this->templateDir);
     }
 }
