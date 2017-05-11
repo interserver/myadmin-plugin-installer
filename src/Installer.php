@@ -17,6 +17,7 @@
 namespace MyAdmin\PluginInstaller;
 
 use Composer\Composer;
+use Composer\Installer\BinaryInstaller;
 use Composer\Installer\LibraryInstaller;
 use Composer\IO\IOInterface;
 use Composer\Package\PackageInterface;
