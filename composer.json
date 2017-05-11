@@ -4,10 +4,10 @@
     "type": "composer-plugin",
     "license": "MIT",
     "autoload": {
-        "psr-4": {"myAdmin\\Composer\\": "src/"}
+        "psr-4": {"MyAdmin\\PluginInstaller\\": "src/"}
     },
     "extra": {
-        "class": "myAdmin\\Composer\\TemplateInstallerPlugin"
+        "class": "MyAdmin\\PluginInstaller\\TemplateInstallerPlugin"
     },
     "require": {
         "composer-plugin-api": "^1.0"

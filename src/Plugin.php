@@ -4,7 +4,7 @@
  * Implements https://github.com/composer/composer/blob/master/src/Composer/Plugin/PluginInterface.php
  */
 
-namespace MyAdmin\Plugins;
+namespace MyAdmin\PluginInstaller;
 
 use Composer\Composer;
 use Composer\EventDispatcher\EventSubscriberInterface;
@@ -39,7 +39,7 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
     public function getCapabilities()
     {
         return array(
-            'Composer\Plugin\Capability\CommandProvider' => 'MyAdmin\Plugins\CommandProvider',
+            'Composer\Plugin\Capability\CommandProvider' => 'MyAdmin\PluginInstaller\CommandProvider',
         );
     }
 

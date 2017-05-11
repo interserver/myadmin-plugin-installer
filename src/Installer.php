@@ -14,7 +14,7 @@
  * 
  */
 
-namespace MyAdmin\Plugins;
+namespace MyAdmin\PluginInstaller;
 
 use Composer\Package\PackageInterface;
 use Composer\Installer\LibraryInstaller;

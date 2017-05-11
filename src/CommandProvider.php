@@ -1,6 +1,6 @@
 <?php
 
-namespace My\Composer;
+namespace MyAdmin\PluginInstaller;
 
 use Composer\Plugin\Capability\CommandProvider as CommandProviderCapability;
 use Symfony\Component\Console\Input\InputInterface;

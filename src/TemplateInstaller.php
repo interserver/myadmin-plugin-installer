@@ -1,6 +1,6 @@
 <?php
 
-namespace myAdmin\Composer;
+namespace MyAdmin\PluginInstaller;
 
 use Composer\Package\PackageInterface;
 use Composer\Installer\LibraryInstaller;
