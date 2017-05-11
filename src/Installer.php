@@ -75,8 +75,8 @@ class Installer extends LibraryInstaller {
      *
      * @return bool
      */
-    public function isInstalled(InstalledRepositoryInterface $repo, PackageInterface $package)
-    {
+    public function isInstalled(Composer\Repository\InstalledRepositoryInterface $repo, Composer\Package\PackageInterface $package) {
+//    public function isInstalled(InstalledRepositoryInterface $repo, PackageInterface $package) {
 	return parent::isInstalled($repo, $package);
         //return $repo->hasPackage($package) && is_readable($this->getInstallPath($package));
     }
