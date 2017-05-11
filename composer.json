@@ -7,7 +7,7 @@
         "psr-4": {"MyAdmin\\PluginInstaller\\": "src/"}
     },
     "extra": {
-        "class": "MyAdmin\\PluginInstaller\\TemplateInstallerPlugin"
+        "class": "MyAdmin\\PluginInstaller\\Plugin"
     },
     "require": {
         "composer-plugin-api": "^1.0"
