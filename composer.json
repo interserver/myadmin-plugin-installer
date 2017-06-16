@@ -3,13 +3,24 @@
     "description": "Composer backed plugin handler and installer for MyAdmin",
     "type": "composer-plugin",
     "license": "MIT",
+	"config": {
+		"bin-dir": "vendor/bin",
+		"minimum-stability": "dev"
+	},
+    "require": {
+        "composer-plugin-api": "^1.0"
+    }
+	"require-dev": {
+		"phpunit/phpunit": "*",
+		"vlucas/phpdotenv": "*",
+		"codeclimate/php-test-reporter": "dev-master",
+		"satooshi/php-coveralls": "*",
+		"codacy/coverage": "dev-master"
+	},
     "autoload": {
         "psr-4": {"MyAdmin\\PluginInstaller\\": "src/"}
     },
     "extra": {
         "class": "MyAdmin\\PluginInstaller\\Plugin"
-    },
-    "require": {
-        "composer-plugin-api": "^1.0"
     }
 }
