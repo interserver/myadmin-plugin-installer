@@ -18,10 +18,10 @@ class InstallerPlugin implements PluginInterface
 	/**
 	 * Apply plugin modifications to Composer
 	 *
-	 * @param Composer\Composer	$composer
-	 * @param Composer\IO\IOInterface $io
+	 * @param \Composer\Composer	$composer
+	 * @param \Composer\IO\IOInterface $io
 	 */
-	public function activate(Composer\Composer $composer, Composer\IO\IOInterface $io) {
+	public function activate(Composer $composer, IOInterface $io) {
 		$installer = new Installer($io, $composer);
 		$composer->getInstallationManager()->addInstaller($installer);
 	}

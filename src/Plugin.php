@@ -20,7 +20,7 @@ use Composer\Plugin\PreFileDownloadEvent;
 class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	protected $composer;
 	protected $io;
-	
+
 	/**
 	 * Apply plugin modifications to Composer
 	 *
@@ -36,12 +36,12 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 		$this->composer->getInstallationManager()->addInstaller($installer);
 	}
 
-    public function getCapabilities()
-    {
-        return array(
-            'Composer\Plugin\Capability\CommandProvider' => 'MyAdmin\PluginInstaller\CommandProvider',
-        );
-    }
+	public function getCapabilities()
+	{
+		return array(
+			'Composer\Plugin\Capability\CommandProvider' => 'MyAdmin\PluginInstaller\CommandProvider',
+		);
+	}
 
 	public static function getSubscribedEvents()
 	{
@@ -56,8 +56,8 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	* @param PreFileDownloadEvent $event
 	*/
 	public function onPreFileDownload(PreFileDownloadEvent $event) {
-		$protocol = parse_url($event->getProcessedUrl(), PHP_URL_SCHEME);
-		/*if ($protocol === 's3') {
+		/*$protocol = parse_url($event->getProcessedUrl(), PHP_URL_SCHEME);
+		if ($protocol === 's3') {
 			$awsClient = new AwsClient($this->io, $this->composer->getConfig());
 			$s3RemoteFilesystem = new S3RemoteFilesystem($this->io, $event->getRemoteFilesystem()->getOptions(), $awsClient);
 			$event->setRemoteFilesystem($s3RemoteFilesystem);
