@@ -46,7 +46,7 @@ class Installer extends LibraryInstaller {
 	 * @param Filesystem      $filesystem
 	 * @param BinaryInstaller $binaryInstaller
 	 */
-	public function __construct(IOInterface $io, Composer $composer, $type = 'library', Filesystem $filesystem = null, BinaryInstaller $binaryInstaller = null)
+	public function __construct(IOInterface $io, Composer $composer, $type = 'library', Filesystem $filesystem = NULL, BinaryInstaller $binaryInstaller = NULL)
 	{
 		$this->composer = $composer;
 		$this->downloadManager = $composer->getDownloadManager();
@@ -69,7 +69,7 @@ class Installer extends LibraryInstaller {
 		'myadmin-plugin',
 		'myadmin-menu',
 	]);
-		//return $packageType === $this->type || null === $this->type;
+		//return $packageType === $this->type || NULL === $this->type;
 	}
 
 
@@ -163,7 +163,7 @@ class Installer extends LibraryInstaller {
 	 */
 	public function ensureBinariesPresence(PackageInterface $package)
 	{
-		$this->binaryInstaller->installBinaries($package, $this->getInstallPath($package), false);
+		$this->binaryInstaller->installBinaries($package, $this->getInstallPath($package), FALSE);
 	}
 
 	/**
