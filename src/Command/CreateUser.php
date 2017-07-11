@@ -10,6 +10,9 @@
 
 namespace MyAdmin\PluginInstaller\Command;
 
+use Symfony\Component\Console\Input\InputArgument;
+use Symfony\Component\Console\Input\InputDefinition;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Composer\Command\BaseCommand;
@@ -20,6 +23,15 @@ class CreateUser extends BaseCommand {
 			->setName('myadmin:create-user') // the name of the command (the part after "bin/console")
 			->setDescription('Creates a new user.') // the short description shown while running "php bin/console list"
 			->setHelp('This command allows you to create a user...') // the full command description shown when running the command with the "--help" option
+			/* http://symfony.com/doc/current/components/console/console_arguments.html
+			->setDefinition(
+				new InputDefinition(array(
+					new InputOption('foo', 'f'),
+					new InputOption('bar', 'b', InputOption::VALUE_REQUIRED),
+					new InputOption('cat', 'c', InputOption::VALUE_OPTIONAL),
+				))
+			)
+			*/
 			->addArgument('username', InputArgument::REQUIRED, 'The username of the user.'); // configure an argument
 
 	}

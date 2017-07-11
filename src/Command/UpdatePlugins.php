@@ -50,7 +50,6 @@ class UpdatePlugins extends BaseCommand {
 			'============',
 			'',
 		]);
-		$output->writeln('Username: '.$input->getArgument('username')); // retrieve the argument value using getArgument()
 		$output->write('You are about to '); // outputs a message without adding a "\n" at the end of the line
 		$output->write('create a user.');
 

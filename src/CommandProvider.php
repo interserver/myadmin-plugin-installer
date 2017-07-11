@@ -12,13 +12,15 @@ namespace MyAdmin\PluginInstaller;
 
 use Composer\Plugin\Capability\CommandProvider as CommandProviderCapability;
 use MyAdmin\PluginInstaller\Command\Command;
+use MyAdmin\PluginInstaller\Command\Parse;
 use MyAdmin\PluginInstaller\Command\CreateUser;
-use MyAdmin\PluginInstaller\Command\UpatePlugins;
+use MyAdmin\PluginInstaller\Command\UpdatePlugins;
 
 class CommandProvider implements CommandProviderCapability {
 	public function getCommands() {
 		return [
 			new Command,
+			new Parse,
 			new CreateUser,
 			new UpdatePlugins,
 		];
