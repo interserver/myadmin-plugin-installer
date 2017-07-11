@@ -5,13 +5,11 @@ namespace MyAdmin\PluginInstaller;
 use Composer\Package\PackageInterface;
 use Composer\Installer\LibraryInstaller;
 
-class TemplateInstaller extends LibraryInstaller
-{
+class TemplateInstaller extends LibraryInstaller {
     /**
      * {@inheritDoc}
      */
-    public function getInstallPath(PackageInterface $package)
-    {
+    public function getInstallPath(PackageInterface $package) {
         $prefix = mb_substr($package->getPrettyName(), 0, 23);
         if ('myadmin/template-' !== $prefix) {
             throw new \InvalidArgumentException(
@@ -20,15 +18,13 @@ class TemplateInstaller extends LibraryInstaller
                 .'"myadmin/template-"'
             );
         }
-
         return 'data/templates/'.mb_substr($package->getPrettyName(), 23);
     }
 
     /**
      * {@inheritDoc}
      */
-    public function supports($packageType)
-    {
+    public function supports($packageType) {
         return 'myadmin-template' === $packageType;
     }
 }

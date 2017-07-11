@@ -13,8 +13,7 @@ use Composer\Plugin\PluginInterface;
 /**
  * MyAdmin Installer Plugin
  */
-class InstallerPlugin implements PluginInterface
-{
+class InstallerPlugin implements PluginInterface {
 	/**
 	 * Apply plugin modifications to Composer
 	 *
