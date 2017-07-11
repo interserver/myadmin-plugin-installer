@@ -39,7 +39,7 @@ class Parse extends BaseCommand {
 	 * This method is executed before the interact() and the execute() methods.
 	 * Its main purpose is to initialize variables used in the rest of the command methods.
 	 */
-	protected function initialize() {}
+	protected function initialize(InputInterface $input, OutputInterface $output) {}
 
 	/** (optional)
 	 * This method is executed after initialize() and before execute().
@@ -47,7 +47,8 @@ class Parse extends BaseCommand {
 	 * ask the user for those values. This is the last place where you can ask for missing
 	 * options/arguments. After this command, missing options/arguments will result in an error.
 	 */
-	protected function interact() {}
+	protected function interact(InputInterface $input, OutputInterface $output) {}
+
 
 	/** (required)
 	 * This method is executed after interact() and initialize().
@@ -112,8 +113,8 @@ class Parse extends BaseCommand {
 		/** @var Project $project */
 		$project = $projectFactory->create('MyProject', $files);
 		$map = do_call($project, 'getFiles', $calls);
-file_put_contents('parse.serial', serialize($map));
-file_put_contents('parse.json', json_encode($map, JSON_PRETTY_PRINT));
+		file_put_contents(__DIR__.'/../../../../../include/config/parse.serial', serialize($map));
+		file_put_contents(__DIR__.'/../../../../../include/config/parse.json', json_encode($map, JSON_PRETTY_PRINT));
 		/** @var \phpDocumentor\Reflection\Php\Class_ $class */
 		/* foreach ($file->getClasses() as $class)
 			echo '- ' . $class->getFqsen() . PHP_EOL;

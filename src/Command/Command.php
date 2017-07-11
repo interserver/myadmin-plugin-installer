@@ -17,19 +17,20 @@ use Composer\Command\BaseCommand;
 class Command extends BaseCommand {
 	protected function configure() {
 		$this
-			->setName('myadmin') // the name of the command (the part after "bin/console")
-			->setDescription('Creates a new user.') // the short description shown while running "php bin/console list"
-			->setHelp('This command allows you to create a user...') // the full command description shown when running the command with the "--help" option
-			/*
-			->addArgument('username', InputArgument::REQUIRED, 'The username of the user.'); // configure an argument
-			*/
+			// the name of the command (the part after "bin/console")
+			->setName('myadmin')
+			// the short description shown while running "php bin/console list"
+			->setDescription('Creates a new user.')
+			// the full command description shown when running the command with the "--help" option
+			->setHelp('This command allows you to create a user...');
+			//->addArgument('username', InputArgument::REQUIRED, 'The username of the user.');
 	}
 
 	/** (optional)
 	 * This method is executed before the interact() and the execute() methods.
 	 * Its main purpose is to initialize variables used in the rest of the command methods.
 	 */
-	protected function initialize() {}
+	protected function initialize(InputInterface $input, OutputInterface $output) {}
 
 	/** (optional)
 	 * This method is executed after initialize() and before execute().
@@ -37,7 +38,7 @@ class Command extends BaseCommand {
 	 * ask the user for those values. This is the last place where you can ask for missing
 	 * options/arguments. After this command, missing options/arguments will result in an error.
 	 */
-	protected function interact() {}
+	protected function interact(InputInterface $input, OutputInterface $output) {}
 
 	/** (required)
 	 * This method is executed after interact() and initialize().

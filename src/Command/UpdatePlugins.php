@@ -26,7 +26,7 @@ class UpdatePlugins extends BaseCommand {
 	 * This method is executed before the interact() and the execute() methods.
 	 * Its main purpose is to initialize variables used in the rest of the command methods.
 	 */
-	protected function initialize() {}
+	protected function initialize(InputInterface $input, OutputInterface $output) {}
 
 	/** (optional)
 	 * This method is executed after initialize() and before execute().
@@ -34,7 +34,8 @@ class UpdatePlugins extends BaseCommand {
 	 * ask the user for those values. This is the last place where you can ask for missing
 	 * options/arguments. After this command, missing options/arguments will result in an error.
 	 */
-	protected function interact() {}
+	protected function interact(InputInterface $input, OutputInterface $output) {}
+
 
 	/** (required)
 	 * This method is executed after interact() and initialize().
