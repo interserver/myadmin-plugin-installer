@@ -1,7 +1,7 @@
 <?php
 /**
  * MyAdmin Installer Plugin
- * Implements https://github.com/composer/composer/blob/master/src/Composer/Plugin/PluginInterface.php
+ * @link https://github.com/composer/composer/blob/master/src/Composer/Plugin/PluginInterface.php
  */
 
 namespace MyAdmin\PluginInstaller;
@@ -31,25 +31,22 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 		$this->composer = $composer;
 		$this->io = $io;
 		print "Hello peoples...";
-
 		$installer = new Installer($this->io, $this->composer);
 		$this->composer->getInstallationManager()->addInstaller($installer);
 	}
 
-	public function getCapabilities()
-	{
-		return array(
+	public function getCapabilities() {
+		return [
 			'Composer\Plugin\Capability\CommandProvider' => 'MyAdmin\PluginInstaller\CommandProvider',
-		);
+		];
 	}
 
-	public static function getSubscribedEvents()
-	{
-		return array(
-			PluginEvents::PRE_FILE_DOWNLOAD => array(
-				array('onPreFileDownload', 0)
-			),
-		);
+	public static function getSubscribedEvents() {
+		return [
+			PluginEvents::PRE_FILE_DOWNLOAD => [
+				['onPreFileDownload', 0]
+			],
+		];
 	}
 
 	/**

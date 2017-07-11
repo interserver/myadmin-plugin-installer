@@ -1,20 +1,19 @@
 <?php
 
-namespace MyAdmin\PluginInstaller;
+namespace MyAdmin\PluginInstaller\Command;
 
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Composer\Command\BaseCommand;
 
-class Command extends BaseCommand {
+class CreateUser extends BaseCommand {
 	protected function configure() {
 		$this
-			->setName('myadmin') // the name of the command (the part after "bin/console")
+			->setName('myadmin:create-user') // the name of the command (the part after "bin/console")
 			->setDescription('Creates a new user.') // the short description shown while running "php bin/console list"
 			->setHelp('This command allows you to create a user...') // the full command description shown when running the command with the "--help" option
-			/*
 			->addArgument('username', InputArgument::REQUIRED, 'The username of the user.'); // configure an argument
-			*/
+
 	}
 
 	/** (optional)
@@ -44,9 +43,7 @@ class Command extends BaseCommand {
 			'============',
 			'',
 		]);
-		/*
 		$output->writeln('Username: '.$input->getArgument('username')); // retrieve the argument value using getArgument()
-		*/
 		$output->write('You are about to '); // outputs a message without adding a "\n" at the end of the line
 		$output->write('create a user.');
 
