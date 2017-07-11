@@ -14,14 +14,12 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Composer\Command\BaseCommand;
 
-class CreateUser extends BaseCommand {
+class UpdatePlugins extends BaseCommand {
 	protected function configure() {
 		$this
-			->setName('myadmin:create-user') // the name of the command (the part after "bin/console")
-			->setDescription('Creates a new user.') // the short description shown while running "php bin/console list"
-			->setHelp('This command allows you to create a user...') // the full command description shown when running the command with the "--help" option
-			->addArgument('username', InputArgument::REQUIRED, 'The username of the user.'); // configure an argument
-
+			->setName('myadmin:update-plugins') // the name of the command (the part after "bin/console")
+			->setDescription('Finds and Caches Plugins into MyAdmin') // the short description shown while running "php bin/console list"
+			->setHelp('This command allows you to create a user...'); // the full command description shown when running the command with the "--help" option
 	}
 
 	/** (optional)
