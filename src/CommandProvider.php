@@ -3,10 +3,14 @@
 namespace MyAdmin\PluginInstaller;
 
 use Composer\Plugin\Capability\CommandProvider as CommandProviderCapability;
-use MyAdmin\PluginInstaller\Command;
+use MyAdmin\PluginInstaller\Command\Command;
+use MyAdmin\PluginInstaller\Command\CreateUser;
 
 class CommandProvider implements CommandProviderCapability {
 	public function getCommands() {
-		return array(new Command);
+		return [
+			new Command,
+			new CreateUser
+		];
 	}
 }
