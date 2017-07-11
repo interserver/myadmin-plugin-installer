@@ -113,7 +113,7 @@ class Parse extends BaseCommand {
 		$project = $projectFactory->create('MyProject', $files);
 		$map = do_call($project, 'getFiles', $calls);
 		file_put_contents(__DIR__.'/../../../../../include/config/parse.serial', serialize($map));
-		file_put_contents(__DIR__.'/../../../../../include/config/parse.json', json_encode($map, JSON_PRETTY_PRINT));
+		file_put_contents(__DIR__.'/../../../../../include/config/parse.json', json_encode($map, JSON_PRETTY_PRINT));a
 		/** @var \phpDocumentor\Reflection\Php\Class_ $class */
 		/* foreach ($file->getClasses() as $class)
 			echo '- ' . $class->getFqsen() . PHP_EOL;
