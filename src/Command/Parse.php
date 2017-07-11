@@ -13,8 +13,6 @@ namespace MyAdmin\PluginInstaller\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Composer\Command\BaseCommand;
-use phpDocumentor\Reflection\Php\Project;
-use phpDocumentor\Reflection\Php\ProjectFactory;
 
 /**
  * Code Parser Comand
