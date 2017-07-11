@@ -113,7 +113,7 @@ class Parse extends BaseCommand {
 		$project = $projectFactory->create('MyProject', $files);
 		$map = do_call($project, 'getFiles', $calls);
 		file_put_contents(__DIR__.'/../../../../../include/config/parse.serial', serialize($map));
-		file_put_contents(__DIR__.'/../../../../../include/config/parse.json', json_encode($map, JSON_PRETTY_PRINT));a
+		file_put_contents(__DIR__.'/../../../../../include/config/parse.json', json_encode($map, JSON_PRETTY_PRINT));
 		/** @var \phpDocumentor\Reflection\Php\Class_ $class */
 		/* foreach ($file->getClasses() as $class)
 			echo '- ' . $class->getFqsen() . PHP_EOL;
@@ -122,29 +122,29 @@ class Parse extends BaseCommand {
 		/* foreach ($file->getFunctions() as $function) {
 			echo '- ' . $function->getFqsen() . PHP_EOL;
 		} */
+
+		/** DocBlock / Reflection Parsing
+		 * Reconstituting a docblock - https://github.com/phpDocumentor/ReflectionDocBlock/blob/master/examples/03-reconstituting-a-docblock.php
+		 * Adding Your own Tag - https://github.com/phpDocumentor/ReflectionDocBlock/blob/master/examples/04-adding-your-own-tag.php
+		 */	
+
+		/*
+		$class = new ReflectionClass('MyClass');
+		$phpdoc = new \phpDocumentor\Reflection\DocBlock($class);
+
+		var_dump($phpdoc->getShortDescription());
+		var_dump($phpdoc->getLongDescription()->getContents());
+		var_dump($phpdoc->getTags());
+		var_dump($phpdoc->hasTag('author'));
+		var_dump($phpdoc->hasTag('copyright'));
+		// But we can also grab all tags of a specific type, such as `see`
+		$seeTags = $docblock->getTagsByName('see');
+
+		$reflector = new ReflectionClass('Example');
+		// to get the Class DocBlock
+		echo $reflector->getDocComment();
+		// to get the Method DocBlock
+		$reflector->getMethod('fn')->getDocComment();
+		*/
 	}
-
-	/** DocBlock / Reflection Parsing
-	 * Reconstituting a docblock - https://github.com/phpDocumentor/ReflectionDocBlock/blob/master/examples/03-reconstituting-a-docblock.php
-	 * Adding Your own Tag - https://github.com/phpDocumentor/ReflectionDocBlock/blob/master/examples/04-adding-your-own-tag.php
-	 */
-
-	/*
-	$class = new ReflectionClass('MyClass');
-	$phpdoc = new \phpDocumentor\Reflection\DocBlock($class);
-
-	var_dump($phpdoc->getShortDescription());
-	var_dump($phpdoc->getLongDescription()->getContents());
-	var_dump($phpdoc->getTags());
-	var_dump($phpdoc->hasTag('author'));
-	var_dump($phpdoc->hasTag('copyright'));
-	// But we can also grab all tags of a specific type, such as `see`
-	$seeTags = $docblock->getTagsByName('see');
-
-	$reflector = new ReflectionClass('Example');
-	// to get the Class DocBlock
-	echo $reflector->getDocComment();
-	// to get the Method DocBlock
-	$reflector->getMethod('fn')->getDocComment();
-	*/
 }
