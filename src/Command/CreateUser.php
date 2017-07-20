@@ -17,6 +17,11 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Composer\Command\BaseCommand;
 
+/**
+ * Class CreateUser
+ *
+ * @package MyAdmin\PluginInstaller\Command
+ */
 class CreateUser extends BaseCommand {
 	protected function configure() {
 		$this
@@ -39,6 +44,9 @@ class CreateUser extends BaseCommand {
 	/** (optional)
 	 * This method is executed before the interact() and the execute() methods.
 	 * Its main purpose is to initialize variables used in the rest of the command methods.
+	 *
+	 * @param \Symfony\Component\Console\Input\InputInterface   $input
+	 * @param \Symfony\Component\Console\Output\OutputInterface $output
 	 */
 	protected function initialize(InputInterface $input, OutputInterface $output) {}
 
@@ -47,6 +55,9 @@ class CreateUser extends BaseCommand {
 	 * Its purpose is to check if some of the options/arguments are missing and interactively
 	 * ask the user for those values. This is the last place where you can ask for missing
 	 * options/arguments. After this command, missing options/arguments will result in an error.
+	 *
+	 * @param \Symfony\Component\Console\Input\InputInterface   $input
+	 * @param \Symfony\Component\Console\Output\OutputInterface $output
 	 */
 	protected function interact(InputInterface $input, OutputInterface $output) {}
 

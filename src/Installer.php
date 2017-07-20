@@ -34,6 +34,11 @@ use Composer\Util\Filesystem;
 use Composer\Util\Silencer;
 use Composer\Repository\InstalledRepositoryInterface;
 
+/**
+ * Class Installer
+ *
+ * @package MyAdmin\PluginInstaller
+ */
 class Installer extends LibraryInstaller {
 	protected $composer;
 	protected $vendorDir;
@@ -179,11 +184,18 @@ class Installer extends LibraryInstaller {
 		return $installPath;
 	}
 
+	/**
+	 * @param \Composer\Package\PackageInterface $package
+	 */
 	protected function installCode(PackageInterface $package) {
 		$downloadPath = $this->getInstallPath($package);
 		$this->downloadManager->download($package, $downloadPath);
 	}
 
+	/**
+	 * @param \Composer\Package\PackageInterface $initial
+	 * @param \Composer\Package\PackageInterface $target
+	 */
 	protected function updateCode(PackageInterface $initial, PackageInterface $target) {
 		$initialDownloadPath = $this->getInstallPath($initial);
 		$targetDownloadPath = $this->getInstallPath($target);
@@ -202,6 +214,9 @@ class Installer extends LibraryInstaller {
 		$this->downloadManager->update($initial, $target, $targetDownloadPath);
 	}
 
+	/**
+	 * @param \Composer\Package\PackageInterface $package
+	 */
 	protected function removeCode(PackageInterface $package) {
 		$downloadPath = $this->getPackageBasePath($package);
 		$this->downloadManager->remove($package, $downloadPath);

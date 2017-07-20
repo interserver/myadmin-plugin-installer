@@ -16,7 +16,15 @@ use MyAdmin\PluginInstaller\Command\Parse;
 use MyAdmin\PluginInstaller\Command\CreateUser;
 use MyAdmin\PluginInstaller\Command\UpdatePlugins;
 
+/**
+ * Class CommandProvider
+ *
+ * @package MyAdmin\PluginInstaller
+ */
 class CommandProvider implements CommandProviderCapability {
+	/**
+	 * @return array
+	 */
 	public function getCommands() {
 		return [
 			new Command,
