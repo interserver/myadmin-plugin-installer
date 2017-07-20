@@ -66,8 +66,8 @@ class Parse extends BaseCommand {
 		$output->writeln([ // outputs multiple lines to the console (adding "\n" at the end of each line)
 			'MyAdmin DocBlock Parser',
 			'=======================',
-			'',
-		]);
+			''
+		                 ]);
 		$output->writeln('<info>foo</info>'); // green text
 		$output->writeln('<comment>foo</comment>'); // yellow text
 		$output->writeln('<question>foo</question>'); // black text on a cyan background
@@ -92,7 +92,7 @@ class Parse extends BaseCommand {
 			'getInterfaces' => ['getParents', 'getConstants', 'getMethods', 'getFqsen', 'getName', 'getDocBlock'],
 			'getArguments'  => ['isByReference', 'isVariadic', 'getName', 'getTypes', 'getDefault'],
 			'getFunctions'  => ['getArguments', 'getFqsen', 'getName', 'getDocBlock'],
-			'getConstants'  => ['getValue', 'getFqsen', 'getName', 'getDocBlock'],
+			'getConstants'  => ['getValue', 'getFqsen', 'getName', 'getDocBlock']
 		];
 		/**
 		 * @param $parent

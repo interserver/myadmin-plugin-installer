@@ -59,8 +59,8 @@ class UpdatePlugins extends BaseCommand {
 		$output->writeln([ // outputs multiple lines to the console (adding "\n" at the end of each line)
 			'User Creator',
 			'============',
-			'',
-		]);
+			''
+		                 ]);
 		$output->write('You are about to '); // outputs a message without adding a "\n" at the end of the line
 		$output->write('create a user.');
 

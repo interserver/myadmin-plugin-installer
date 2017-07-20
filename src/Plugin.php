@@ -49,7 +49,7 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	 */
 	public function getCapabilities() {
 		return [
-			'Composer\Plugin\Capability\CommandProvider' => 'MyAdmin\PluginInstaller\CommandProvider',
+			'Composer\Plugin\Capability\CommandProvider' => 'MyAdmin\PluginInstaller\CommandProvider'
 		];
 	}
 
@@ -95,7 +95,7 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 		return [
 			PluginEvents::PRE_FILE_DOWNLOAD => [
 				['onPreFileDownload', 0]
-			],
+			]
 		];
 	}
 

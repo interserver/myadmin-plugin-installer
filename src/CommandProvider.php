@@ -30,7 +30,7 @@ class CommandProvider implements CommandProviderCapability {
 			new Command,
 			new Parse,
 			new CreateUser,
-			new UpdatePlugins,
+			new UpdatePlugins
 		];
 	}
 }

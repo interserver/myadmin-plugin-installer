@@ -62,8 +62,8 @@ class Command extends BaseCommand {
 		$output->writeln([ // outputs multiple lines to the console (adding "\n" at the end of each line)
 			'User Creator',
 			'============',
-			'',
-		]);
+			''
+		                 ]);
 		/*
 		$output->writeln('Username: '.$input->getArgument('username')); // retrieve the argument value using getArgument()
 		*/

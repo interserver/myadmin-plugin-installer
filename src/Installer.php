@@ -79,7 +79,7 @@ class Installer extends LibraryInstaller {
 			'myadmin-template',
 			'myadmin-module',
 			'myadmin-plugin',
-			'myadmin-menu',
+			'myadmin-menu'
 		]);
 		//return $packageType === $this->type || NULL === $this->type;
 	}
