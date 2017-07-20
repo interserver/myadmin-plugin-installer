@@ -39,7 +39,7 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	public function activate(Composer $composer, IOInterface $io) {
 		$this->composer = $composer;
 		$this->io = $io;
-		print "Hello peoples...";
+		print 'Hello peoples...';
 		$installer = new Installer($this->io, $this->composer);
 		$this->composer->getInstallationManager()->addInstaller($installer);
 	}

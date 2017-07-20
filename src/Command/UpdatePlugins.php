@@ -84,7 +84,7 @@ class UpdatePlugins extends BaseCommand {
 		$formattedBlock = $formatter->formatBlock($errorMessages, 'error');
 		$output->writeln($formattedBlock);
 		// Truncated Messages
-		$message = "This is a very long message, which should be truncated";
+		$message = 'This is a very long message, which should be truncated';
 		$truncatedMessage = $formatter->truncate($message, 7); // This is...
 		$truncatedMessage = $formatter->truncate($message, 7, '!!'); // result: This is!!
 		$output->writeln($truncatedMessage);
