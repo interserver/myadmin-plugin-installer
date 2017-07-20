@@ -19,9 +19,10 @@ use Composer\Installer\LibraryInstaller;
  * @package MyAdmin\PluginInstaller
  */
 class TemplateInstaller extends LibraryInstaller {
-    /**
-     * {@inheritDoc}
-     */
+	/**
+	 * {@inheritDoc}
+	 * @throws \InvalidArgumentException
+	 */
     public function getInstallPath(PackageInterface $package) {
         $prefix = mb_substr($package->getPrettyName(), 0, 23);
         if ('myadmin/template-' !== $prefix) {

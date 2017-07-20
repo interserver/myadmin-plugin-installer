@@ -112,8 +112,10 @@ class Installer extends LibraryInstaller {
 		if (!$repo->hasPackage($package))
 			$repo->addPackage(clone $package);
 	}
+
 	/**
 	 * {@inheritDoc}
+	 * @throws \InvalidArgumentException
 	 */
 	public function update(InstalledRepositoryInterface $repo, PackageInterface $initial, PackageInterface $target) {
 		if (!$repo->hasPackage($initial))
@@ -126,8 +128,10 @@ class Installer extends LibraryInstaller {
 		if (!$repo->hasPackage($target))
 			$repo->addPackage(clone $target);
 	}
+
 	/**
 	 * {@inheritDoc}
+	 * @throws \InvalidArgumentException
 	 */
 	public function uninstall(InstalledRepositoryInterface $repo, PackageInterface $package) {
 		if (!$repo->hasPackage($package))
