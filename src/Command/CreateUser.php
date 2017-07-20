@@ -94,7 +94,7 @@ class CreateUser extends BaseCommand {
 		$formattedLine = $formatter->formatSection('SomeSection', 'Here is some message related to that section');
 		$output->writeln($formattedLine);
 		// Error Block
-		$errorMessages = array('Error!', 'Something went wrong');
+		$errorMessages = ['Error!', 'Something went wrong'];
 		$formattedBlock = $formatter->formatBlock($errorMessages, 'error');
 		$output->writeln($formattedBlock);
 		// Truncated Messages
