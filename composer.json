@@ -1,5 +1,5 @@
 {
-    "name": "detain\/myadmin-plugin-installer",
+    "name": "detain/myadmin-plugin-installer",
     "description": "Composer backed plugin handler and installer for MyAdmin",
     "type": "composer-plugin",
     "license": "MIT",
@@ -9,14 +9,14 @@
     },
     "require": {
         "composer-plugin-api": "^1.0",
-        "roave\/security-advisories": "dev-master"
+        "roave/security-advisories": "dev-master"
     },
     "require-dev": {
-        "phpunit\/phpunit": "*",
-        "vlucas\/phpdotenv": "*",
-        "codeclimate\/php-test-reporter": "dev-master",
-        "satooshi\/php-coveralls": "*",
-        "codacy\/coverage": "dev-master"
+        "phpunit/phpunit": "*",
+        "vlucas/phpdotenv": "*",
+        "codeclimate/php-test-reporter": "dev-master",
+        "satooshi/php-coveralls": "*",
+        "codacy/coverage": "dev-master"
     },
     "autoload": {
         "psr-4": {
