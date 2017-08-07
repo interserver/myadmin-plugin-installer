@@ -40,16 +40,7 @@ use Composer\Repository\InstalledRepositoryInterface;
  * @package MyAdmin\PluginInstaller
  */
 class Installer extends LibraryInstaller {
-	protected $composer;
-	protected $vendorDir;
 	protected $templateDir;
-	protected $binDir;
-	protected $downloadManager;
-	protected $io;
-	protected $type;
-	protected $filesystem;
-	protected $binCompat;
-	protected $binaryInstaller;
 
 	/**
 	 * Initializes library installer.
