@@ -20,7 +20,7 @@
     },
     "autoload": {
         "psr-4": {
-            "MyAdmin\\PluginInstaller\\": "src\/"
+            "MyAdmin\\PluginInstaller\\": "src/"
         }
     },
     "extra": {
