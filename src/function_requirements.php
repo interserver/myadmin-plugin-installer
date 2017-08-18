@@ -520,11 +520,11 @@ function function_requirements($function) {
 	$loader->add_page_requirement('repeat_invoice_edit_cust', '/admin/customers/edit_customer3.php');
 	$loader->add_requirement('str_stringify', '/domains/stringify_test.php');
 	$loader->add_page_requirement('invoices_report', '/billing/invoices_report.php');
-
-	$event = new GenericEvent($loader);
-	$GLOBALS['tf']->dispatcher->dispatch('function.requirements', $event);
+	if (isset($GLOBALS['tf'])) {
+		$event = new GenericEvent($loader);
+		$GLOBALS['tf']->dispatcher->dispatch('function.requirements', $event);
+	}
 	$requirements = $loader->get_requirements();
-
 	if (defined('INCLUDE_ROOT'))
 		$include_root = INCLUDE_ROOT;
 	else
