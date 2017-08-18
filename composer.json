@@ -24,7 +24,8 @@
             "MyAdmin\\Plugins\\": "src/"
         },
         "files": [
-            "src/function_requirements.php"
+            "src/function_requirements.php",
+            "src/modules.php"
         ]
     },
     "extra": {
