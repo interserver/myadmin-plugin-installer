@@ -6,7 +6,7 @@
  */
 
 use Symfony\Component\EventDispatcher\GenericEvent;
-use MyAdmin\Loader;
+use MyAdmin\Plugins\Loader;
 
 /**
  * @param $function

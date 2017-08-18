@@ -22,7 +22,10 @@
     "autoload": {
         "psr-4": {
             "MyAdmin\\Plugins\\": "src/"
-        }
+        },
+        "files": [
+            "src/function_requirements.php"
+        ]
     },
     "extra": {
         "class": "MyAdmin\\Plugins\\Plugin"
