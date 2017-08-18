@@ -7,7 +7,7 @@
  * @category Plugins
  */
 
-namespace MyAdmin\PluginInstaller\Command;
+namespace MyAdmin\Plugins\Command;
 
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputDefinition;
@@ -19,7 +19,7 @@ use Composer\Command\BaseCommand;
 /**
  * Class CreateUser
  *
- * @package MyAdmin\PluginInstaller\Command
+ * @package MyAdmin\Plugins\Command
  */
 class CreateUser extends BaseCommand {
 	protected function configure() {

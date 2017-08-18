@@ -12,7 +12,7 @@
  * Implements https://github.com/composer/composer/blob/master/src/Composer/Plugin/PluginInterface.php
  */
 
-namespace MyAdmin\PluginInstaller;
+namespace MyAdmin\Plugins;
 
 use Composer\Composer;
 use Composer\IO\IOInterface;

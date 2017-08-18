@@ -7,7 +7,7 @@
  * @category Plugins
  */
 
-namespace MyAdmin\PluginInstaller;
+namespace MyAdmin\Plugins;
 
 use Composer\Package\PackageInterface;
 use Composer\Installer\LibraryInstaller;
@@ -15,7 +15,7 @@ use Composer\Installer\LibraryInstaller;
 /**
  * Class TemplateInstaller
  *
- * @package MyAdmin\PluginInstaller
+ * @package MyAdmin\Plugins
  */
 class TemplateInstaller extends LibraryInstaller {
 	/**

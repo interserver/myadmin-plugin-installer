@@ -7,18 +7,18 @@
  * @category Plugins
  */
 
-namespace MyAdmin\PluginInstaller;
+namespace MyAdmin\Plugins;
 
 use Composer\Plugin\Capability\CommandProvider as CommandProviderCapability;
-use MyAdmin\PluginInstaller\Command\Command;
-use MyAdmin\PluginInstaller\Command\Parse;
-use MyAdmin\PluginInstaller\Command\CreateUser;
-use MyAdmin\PluginInstaller\Command\UpdatePlugins;
+use MyAdmin\Plugins\Command\Command;
+use MyAdmin\Plugins\Command\Parse;
+use MyAdmin\Plugins\Command\CreateUser;
+use MyAdmin\Plugins\Command\UpdatePlugins;
 
 /**
  * Class CommandProvider
  *
- * @package MyAdmin\PluginInstaller
+ * @package MyAdmin\Plugins
  */
 class CommandProvider implements CommandProviderCapability {
 	/**

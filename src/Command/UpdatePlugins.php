@@ -7,7 +7,7 @@
  * @category Plugins
  */
 
-namespace MyAdmin\PluginInstaller\Command;
+namespace MyAdmin\Plugins\Command;
 
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -16,7 +16,7 @@ use Composer\Command\BaseCommand;
 /**
  * Class UpdatePlugins
  *
- * @package MyAdmin\PluginInstaller\Command
+ * @package MyAdmin\Plugins\Command
  */
 class UpdatePlugins extends BaseCommand {
 	protected function configure() {

@@ -22,7 +22,7 @@
  *
  */
 
-namespace MyAdmin\PluginInstaller;
+namespace MyAdmin\Plugins;
 
 use Composer\Composer;
 use Composer\Installer\BinaryInstaller;
@@ -36,7 +36,7 @@ use Composer\Repository\InstalledRepositoryInterface;
 /**
  * Class Installer
  *
- * @package MyAdmin\PluginInstaller
+ * @package MyAdmin\Plugins
  */
 class Installer extends LibraryInstaller {
 	protected $templateDir;

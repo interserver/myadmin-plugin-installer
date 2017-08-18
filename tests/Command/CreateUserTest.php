@@ -1,8 +1,8 @@
 <?php
 // tests/AppBundle/Command/CreateUserCommandTest.php
-namespace Tests\MyAdmin\PluginInstaller\Command;
+namespace Tests\MyAdmin\Plugins\Command;
 
-use MyAdmin\PluginInstaller\Command\CreateUser;
+use MyAdmin\Plugins\Command\CreateUser;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -10,7 +10,7 @@ use Symfony\Component\Console\Tester\CommandTester;
 /**
  * Class CreateUserTest
  *
- * @package Tests\MyAdmin\PluginInstaller\Command
+ * @package Tests\MyAdmin\Plugins\Command
  */
 class CreateUserTest extends KernelTestCase {
 	public function testExecute() {

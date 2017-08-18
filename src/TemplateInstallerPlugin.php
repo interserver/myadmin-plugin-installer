@@ -7,7 +7,7 @@
  * @category Plugins
  */
 
-namespace MyAdmin\PluginInstaller;
+namespace MyAdmin\Plugins;
 
 use Composer\Composer;
 use Composer\IO\IOInterface;
@@ -16,7 +16,7 @@ use Composer\Plugin\PluginInterface;
 /**
  * Class TemplateInstallerPlugin
  *
- * @package MyAdmin\PluginInstaller
+ * @package MyAdmin\Plugins
  */
 class TemplateInstallerPlugin implements PluginInterface {
 	/**

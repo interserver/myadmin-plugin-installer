@@ -10,12 +10,12 @@
         }
     ],
     "autoload": {
-        "psr-4": {"MyAdmin\\PluginInstaller\\": "src/"}
+        "psr-4": {"MyAdmin\\Plugins\\": "src/"}
     },
     "require": {
         "composer-plugin-api": "^1.0"
     },
     "extra": {
-         "class":  "MyAdmin\\PluginInstaller\\MyPlugins"
+         "class":  "MyAdmin\\Plugins\\MyPlugins"
     }
 }
