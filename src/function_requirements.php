@@ -28,7 +28,6 @@ function function_requirements($function) {
 	$loader->add_requirement('class.FPDF', '/Rendering/FPDF.php');
 	$loader->add_requirement('class.GIFEncoder', '/Rendering/GIFEncoder.php');
 	$loader->add_requirement('class.PDF', '/Rendering/PDF.php');
-	$loader->add_requirement('class.RESTClient', '/Rendering/RESTClient.php');
 	$loader->add_requirement('class.TFTable', '/Rendering/TFTable.php');
 	$loader->add_requirement('spark', '/spark.php');
 	$loader->add_page_requirement('auto_cpanel_login', '/webhosting/auto_cpanel_login.php');
