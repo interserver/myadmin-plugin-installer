@@ -2,7 +2,7 @@
 /**
  * @author Joe Huss <detain@interserver.net>
  * @copyright 2017
- * @package MyAdmin
+ * @package Plugins
  */
 
 use Symfony\Component\EventDispatcher\GenericEvent;
