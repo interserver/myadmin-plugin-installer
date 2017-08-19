@@ -72,6 +72,7 @@ function function_requirements($function) {
 	$loader->add_requirement('class.DataWizardGridGUI', '/js/DataWizardGridGUI.php');
 	$loader->add_page_requirement('data_wizard_grid_gui', '/js/data_wizard_grid_gui.php');
 	$loader->add_page_requirement('home', '/home.inc.php');
+	$loader->add_requirement('crontab', '/admin/configuration/crontab.php');
 	$loader->add_requirement('plugin_find_all', '/admin/configuration/plugins.php');
 	$loader->add_requirement('plugin_load', '/admin/configuration/plugins.php');
 	$loader->add_requirement('plugin_load_composer', '/admin/configuration/plugins.php');
