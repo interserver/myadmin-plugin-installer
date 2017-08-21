@@ -45,6 +45,7 @@ function function_requirements($function) {
 	$loader->add_page_requirement('view_ticket', '/helpdesk/view_ticket.php');
 	$loader->add_requirement('whois_privacy', '/domains/whois_privacy.php');
 	$loader->add_requirement('ChatPayment', '/billing/payments/ChatPayment.php');
+	$loader->add_requirement('payment_ipn_handler', '/billing/payments/payment_ipn_handler.php');
 	$loader->add_requirement('post_payment_processing_new', '/billing/payments/post_payment_processing_new.php');
 	$loader->add_requirement('class.ServiceOrder', '/billing/ServiceOrder.php');
 	$loader->add_requirement('class.Addon', '/billing/Addon.php');
