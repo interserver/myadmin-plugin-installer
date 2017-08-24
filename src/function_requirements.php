@@ -9,9 +9,11 @@ use Symfony\Component\EventDispatcher\GenericEvent;
 use MyAdmin\Plugins\Loader;
 
 /**
- * @param $function
+ * gets the function requirements loader
+ *
+ * @return MyAdmin\Plugins\Loader
  */
-function function_requirements($function) {
+function get_function_requirements() {
 	$loader = new Loader();
 	$loader->add_requirement('ftp_string', '/ftp_string.php');
 	$loader->add_requirement('phpExcellCommon', '/../vendor/detain/crud/src/Export/phpExcellCommon.php');
@@ -525,6 +527,14 @@ function function_requirements($function) {
 		$event = new GenericEvent($loader);
 		$GLOBALS['tf']->dispatcher->dispatch('function.requirements', $event);
 	}
+	return $loader;
+}
+
+/**
+ * @param $function
+ */
+function function_requirements($function) {
+	$loader = get_function_requirements();
 	$requirements = $loader->get_requirements();
 	if (defined('INCLUDE_ROOT'))
 		$include_root = INCLUDE_ROOT;
