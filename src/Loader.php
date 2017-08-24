@@ -15,6 +15,7 @@ class Loader {
 	private $requirements;
 	private $routes;
 	private $admin_routes;
+	private $public_routes;
 
 	/**
 	 * Loader constructor.
@@ -23,6 +24,7 @@ class Loader {
 		$this->requirements = [];
 		$this->routes = [];
 		$this->admin_routes = [];
+		$this->public_routes = [];
 	}
 
 	/**
@@ -41,6 +43,15 @@ class Loader {
 	 */
 	public function get_admin_routes() {
 		return $this->admin_routes;
+	}
+
+	/**
+	 * gets the public page routes
+	 *
+	 * @return array of routes
+	 */
+	public function get_public_routes() {
+		return $this->public_routes;
 	}
 
 	/**
@@ -76,6 +87,16 @@ class Loader {
 	public function add_root_page_requirement($function, $source, $namespace = '') {
 		$this->routes['/'.$function] = $namespace.$function;
 		$this->add_requirement($function, $source, $namespace);
+	}
+
+	/**
+	 * adds a requirement into the loader and registers it as a page with the router
+	 *
+	 * @param string $function php function name or class.class_name
+	 * @param string $path source file path
+	 */
+	public function add_public_path($page, $source) {
+		$this->public_routes['/'.$page] = $source;
 	}
 
 	/**
