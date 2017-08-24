@@ -14,6 +14,7 @@ namespace MyAdmin\Plugins;
 class Loader {
 	private $requirements;
 	private $routes;
+	private $admin_routes;
 
 	/**
 	 * Loader constructor.
@@ -21,6 +22,25 @@ class Loader {
 	public function __construct() {
 		$this->requirements = [];
 		$this->routes = [];
+		$this->admin_routes = [];
+	}
+
+	/**
+	 * gets the page routes
+	 *
+	 * @return array of routes
+	 */
+	public function get_routes() {
+		return $this->routes;
+	}
+
+	/**
+	 * gets the admin page routes
+	 *
+	 * @return array of routes
+	 */
+	public function get_admin_routes() {
+		return $this->admin_routes;
 	}
 
 	/**
@@ -41,8 +61,8 @@ class Loader {
 	 * @param string $namespace optional php namespace
 	 */
 	public function add_page_requirement($function, $source, $namespace = '') {
-		$this->routes[] = ['/'.$function, $namespace.$source];
-		$this->routes[] = ['/admin/'.$function, $namespace.$source];
+		$this->routes['/'.$function] = $namespace.$function;
+		$this->admin_routes['/'.$function] = $namespace.$function;
 		$this->add_requirement($function, $source, $namespace);
 	}
 
@@ -54,7 +74,7 @@ class Loader {
 	 * @param string $namespace optional php namespace
 	 */
 	public function add_root_page_requirement($function, $source, $namespace = '') {
-		$this->routes[] = ['/'.$function, $namespace.$source];
+		$this->routes['/'.$function] = $namespace.$function;
 		$this->add_requirement($function, $source, $namespace);
 	}
 
@@ -66,7 +86,7 @@ class Loader {
 	 * @param string $namespace optional php namespace
 	 */
 	public function add_ajax_page_requirement($function, $source, $namespace = '') {
-		$this->routes[] = ['/ajax/'.$function, $namespace.$source];
+		$this->routes['/ajax/'.$function] = $namespace.$function;
 		$this->add_requirement($function, $source, $namespace);
 	}
 
@@ -78,7 +98,7 @@ class Loader {
 	 * @param string $namespace optional php namespace
 	 */
 	public function add_admin_page_requirement($function, $source, $namespace = '') {
-		$this->routes[] = ['/admin/'.$function, $namespace.$source];
+		$this->admin_routes['/'.$function] = $namespace.$function;
 		$this->add_requirement($function, $source, $namespace);
 	}
 
