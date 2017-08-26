@@ -12,10 +12,10 @@ namespace MyAdmin\Plugins;
  * @package MyAdmin
  */
 class Loader {
-	private $requirements;
-	private $routes;
-	private $admin_routes;
-	private $public_routes;
+	protected $requirements;
+	protected $routes;
+	protected $admin_routes;
+	protected $public_routes;
 
 	/**
 	 * Loader constructor.
@@ -30,10 +30,13 @@ class Loader {
 	/**
 	 * gets the page routes
 	 *
+	 * @param bool $include_admin
 	 * @return array of routes
 	 */
-	public function get_routes() {
-		return $this->routes;
+	public function get_routes($include_admin = FALSE) {
+		//if ($include_admin === FALSE && $GLOBALS['tf']->ima === 'admin')
+			//$include_admin = TRUE;
+		return $include_admin === TRUE? array_merge($this->admin_routes, $this->routes) : $this->routes;
 	}
 
 	/**
