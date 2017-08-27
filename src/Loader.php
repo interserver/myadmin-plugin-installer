@@ -36,7 +36,19 @@ class Loader {
 	public function get_routes($include_admin = FALSE) {
 		//if ($include_admin === FALSE && $GLOBALS['tf']->ima === 'admin')
 			//$include_admin = TRUE;
-		return $include_admin === TRUE? array_merge($this->admin_routes, $this->routes) : $this->routes;
+		$routes = array_merge($this->public_routes, $this->routes);
+		if ($include_admin === TRUE)
+			$routes = array_merge($this->admin_routes, $routes);
+		uksort($routes, function($a, $b) {
+			if (strlen($a) == strlen($b)) {
+				if ($a == $b)
+					return 0;
+				return ($a > $b) ? -1 : 1;
+			} else
+				return (strlen($a) > strlen($b)) ? -1 : 1;
+		});
+		//myadmin_log('route', 'debug', json_encode($routes), __LINE__, __FILE__);
+		return $routes;
 	}
 
 	/**
@@ -76,7 +88,7 @@ class Loader {
 	 */
 	public function add_page_requirement($function, $source, $namespace = '') {
 		$this->routes['/'.$function] = $namespace.$function;
-		$this->admin_routes['/'.$function] = $namespace.$function;
+		$this->routes['/admin/'.$function] = $namespace.$function;
 		$this->add_requirement($function, $source, $namespace);
 	}
 
@@ -122,7 +134,7 @@ class Loader {
 	 * @param string $namespace optional php namespace
 	 */
 	public function add_admin_page_requirement($function, $source, $namespace = '') {
-		$this->admin_routes['/'.$function] = $namespace.$function;
+		$this->admin_routes['/admin/'.$function] = $namespace.$function;
 		$this->add_requirement($function, $source, $namespace);
 	}
 
