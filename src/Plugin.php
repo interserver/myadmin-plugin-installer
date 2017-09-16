@@ -170,10 +170,14 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	}
 
 	public static function getHttpdUser() {
-		return self::runProcess("ps aux | grep -E '[a]pache|[h]ttpd|[_]www|[w]ww-data|[n]ginx' | grep -v root | head -1 | cut -d\  -f1");
+		$ps = self::runProcess('ps aux');
+		preg_match('/^.*{[a]pache|[h]ttpd|[_]www|[w]ww-data|[n]ginx}/', $ps, $matches);
+		$ps = explode(' ', $matches[0]);
+		return $ps[0];
 	}
 
 	public static function runProcess($commandline) {
+		echo sprintf('<info>Running %s</info>', $commandline) . PHP_EOL;
 		exec($commandline, $output, $return);
 		if ($return != 0)
 			throw new \Exception('Returned Error Code '.$return);
