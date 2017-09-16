@@ -143,44 +143,46 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 
 	public static function setPermissionsSetfacl(Event $event) {
 		foreach (self::getWritableDirs($event) as $path)
-			self::SetfaclPermissionsSetter($path);
+			self::SetfaclPermissionsSetter($event, $path);
 	}
 
 	public static function setPermissionsChmod(Event $event) {
 		foreach (self::getWritableDirs($event) as $path)
-			self::ChmodPermissionsSetter($path);
+			self::ChmodPermissionsSetter($event, $path);
 	}
 
-	public static function SetfaclPermissionsSetter($path) {
+	public static function SetfaclPermissionsSetter(Event $event, $path) {
 		if (!is_dir($path))
 			mkdir($path, 0777, true);
 		if (!is_dir($path))
 			throw new \Exception('Path Not Found: '.$path);
-		self::runCommand('setfacl -m u:"%httpduser%":rwX -m u:$USER:rwX %path%', $path);
-		self::runCommand('setfacl -d -m u:"%httpduser%":rwX -m u:$USER:rwX %path%', $path);
+		self::runCommand($event, 'setfacl -m u:"%httpduser%":rwX -m u:$USER:rwX %path%', $path);
+		self::runCommand($event, 'setfacl -d -m u:"%httpduser%":rwX -m u:$USER:rwX %path%', $path);
 	}
 
-	public static function ChmodPermissionsSetter($path) {
+	public static function ChmodPermissionsSetter(Event $event, $path) {
 		if (!is_dir($path))
 			mkdir($path, 0777, true);
 		if (!is_dir($path))
 			throw new \Exception('Path Not Found: '.$path);
-		self::runCommand('chmod +a "%httpduser% allow delete,write,append,file_inherit,directory_inherit" %path%', $path);
-		self::runCommand('chmod +a "$USER allow delete,write,append,file_inherit,directory_inherit" %path%', $path);
+		self::runCommand($event, 'chmod +a "%httpduser% allow delete,write,append,file_inherit,directory_inherit" %path%', $path);
+		self::runCommand($event, 'chmod +a "$USER allow delete,write,append,file_inherit,directory_inherit" %path%', $path);
 	}
 
-	public static function runCommand($command, $path) {
-		return self::runProcess(str_replace(['%httpduser%', '%path%'], [self::getHttpdUser(), $path], $command));
+	public static function runCommand(Event $event, $command, $path) {
+		return self::runProcess($event, str_replace(['%httpduser%', '%path%'], [self::getHttpdUser(), $path], $command));
 	}
 
-	public static function getHttpdUser() {
-		$ps = self::runProcess('ps aux');
+	public static function getHttpdUser(Event $event) {
+		$ps = self::runProcess($event, 'ps aux');
 		preg_match('/^.*([a]pache|[h]ttpd|[_]www|[w]ww-data|[n]ginx)$/m', $ps, $matches);
 		$ps = explode(' ', $matches[0]);
 		return $ps[0];
 	}
 
-	public static function runProcess($commandline) {
+	public static function runProcess(Event $event, $commandline) {
+		if ($event->getIO()->isVerbose() === TRUE)
+			$event->getIO()->write(sprintf('Running <info>%s</info>', $commandline));
 		exec($commandline, $output, $return);
 		if ($return != 0)
 			throw new \Exception('Returned Error Code '.$return);
