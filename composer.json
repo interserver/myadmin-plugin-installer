@@ -1,34 +1,34 @@
 {
-    "name": "detain/myadmin-plugin-installer",
-    "description": "Composer backed plugin handler and installer for MyAdmin",
-    "type": "composer-plugin",
-    "license": "MIT",
-    "config": {
-        "bin-dir": "vendor\/bin",
-        "minimum-stability": "dev"
-    },
-    "require": {
-        "composer-plugin-api": "^1.0",
-        "roave/security-advisories": "dev-master"
-    },
-    "require-dev": {
-        "phpunit/phpunit": "*",
-        "vlucas/phpdotenv": "*",
-        "codeclimate/php-test-reporter": "dev-master",
-        "satooshi/php-coveralls": "*",
-        "codacy/coverage": "dev-master",
-        "symfony/framework-bundle": "*"
-    },
-    "autoload": {
-        "psr-4": {
-            "MyAdmin\\Plugins\\": "src/"
-        },
-        "files": [
-            "src/function_requirements.php",
-            "src/modules.php"
-        ]
-    },
-    "extra": {
-        "class": "MyAdmin\\Plugins\\Plugin"
-    }
+	"name": "detain/myadmin-plugin-installer",
+	"description": "Composer backed plugin handler and installer for MyAdmin",
+	"type": "composer-plugin",
+	"license": "MIT",
+	"config": {
+		"bin-dir": "vendor\/bin",
+		"minimum-stability": "dev"
+	},
+	"require": {
+		"composer-plugin-api": "^1.0",
+		"roave/security-advisories": "dev-master"
+	},
+	"require-dev": {
+		"phpunit/phpunit": "*",
+		"vlucas/phpdotenv": "*",
+		"codeclimate/php-test-reporter": "dev-master",
+		"satooshi/php-coveralls": "*",
+		"codacy/coverage": "dev-master",
+		"symfony/framework-bundle": "*"
+	},
+	"autoload": {
+		"psr-4": {
+			"MyAdmin\\Plugins\\": "src/"
+		},
+		"files": [
+			"src/function_requirements.php",
+			"src/modules.php"
+		]
+	},
+	"extra": {
+		"class": "MyAdmin\\Plugins\\Plugin"
+	}
 }

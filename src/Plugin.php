@@ -109,4 +109,73 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 			$event->setRemoteFilesystem($s3RemoteFilesystem);
 		}*/
 	}
+
+	public static function setPermissions(Event $event) {
+		if ('WIN' === strtoupper(substr(PHP_OS, 0, 3))) {
+			$event->getIO()->write('<info>No permissions setup is required on Windows.</info>');
+			return;
+		}
+		$event->getIO()->write('Setting up permissions.');
+		try {
+			self::setPermissionsSetfacl($event);
+			return;
+		} catch (Exception $setfaclException) {
+			$event->getIO()->write(sprintf('<error>%s</error>', $setfaclException->getMessage()));
+			$event->getIO()->write('<info>Trying chmod...</info>');
+		}
+		try {
+			self::setPermissionsChmod($event);
+			return;
+		} catch (Exception $chmodException) {
+			$event->getIO()->write(sprintf('<error>%s</error>', $chmodException->getMessage()));
+		}
+	}
+
+	public static function getWritableDirs(Event $event) {
+		$configuration = $event->getComposer()->getPackage()->getExtra();
+		if (!isset($configuration['writable-dirs']))
+			throw new Exception('The writable-dirs must be specified in composer arbitrary extra data.');
+		if (!is_array($configuration['writable-dirs']))
+			throw new Exception('The writable-dirs must be an array.');
+		return $configuration['writable-dirs'];
+	}
+
+	public static function setPermissionsSetfacl(Event $event) {
+		foreach (self::getWritableDirs() as $path)
+			self::SetfaclPermissionsSetter($path);
+	}
+
+	public static function setPermissionsChmod(Event $event) {
+		foreach (self::getWritableDirs() as $path)
+			self::ChmodPermissionsSetter($path);
+	}
+
+	public static function SetfaclPermissionsSetter($path) {
+		if (!is_dir($path))
+			throw new Exception('Path Not Found: '.$path);
+		self::runCommand('setfacl -m u:"%httpduser%":rwX -m u:`whoami`:rwX %path%', $path);
+		self::runCommand('setfacl -d -m u:"%httpduser%":rwX -m u:`whoami`:rwX %path%', $path);
+	}
+
+	public static function ChmodPermissionsSetter($path) {
+		if (!is_dir($path))
+			throw new Exception('Path Not Found: '.$path);
+		self::runCommand('chmod +a "%httpduser% allow delete,write,append,file_inherit,directory_inherit" %path%', $path);
+		self::runCommand('chmod +a "`whoami` allow delete,write,append,file_inherit,directory_inherit" %path%', $path);
+	}
+
+	public static function runCommand($command, $path) {
+		return self::runProcess(str_replace(['%httpduser%', '%path%'], [self::getHttpdUser(), $path], $command));
+	}
+
+	public static function getHttpdUser() {
+		return self::runProcess("ps aux | grep -E '[a]pache|[h]ttpd|[_]www|[w]ww-data|[n]ginx' | grep -v root | head -1 | cut -d\  -f1");
+	}
+
+	public static function runProcess($commandline) {
+		exec($commandline, $output, $return);
+		if ($return != 0)
+			throw new Exception('Returned Error Code '.$return);
+		return implode(PHP_EOL, $output);
+	}
 }
