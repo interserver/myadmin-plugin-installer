@@ -119,14 +119,14 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 		try {
 			self::setPermissionsSetfacl($event);
 			return;
-		} catch (Exception $setfaclException) {
+		} catch (\Exception $setfaclException) {
 			$event->getIO()->write(sprintf('<error>%s</error>', $setfaclException->getMessage()));
 			$event->getIO()->write('<info>Trying chmod...</info>');
 		}
 		try {
 			self::setPermissionsChmod($event);
 			return;
-		} catch (Exception $chmodException) {
+		} catch (\Exception $chmodException) {
 			$event->getIO()->write(sprintf('<error>%s</error>', $chmodException->getMessage()));
 		}
 	}
@@ -134,9 +134,9 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	public static function getWritableDirs(Event $event) {
 		$configuration = $event->getComposer()->getPackage()->getExtra();
 		if (!isset($configuration['writable-dirs']))
-			throw new Exception('The writable-dirs must be specified in composer arbitrary extra data.');
+			throw new \Exception('The writable-dirs must be specified in composer arbitrary extra data.');
 		if (!is_array($configuration['writable-dirs']))
-			throw new Exception('The writable-dirs must be an array.');
+			throw new \Exception('The writable-dirs must be an array.');
 		return $configuration['writable-dirs'];
 	}
 
@@ -152,14 +152,14 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 
 	public static function SetfaclPermissionsSetter($path) {
 		if (!is_dir($path))
-			throw new Exception('Path Not Found: '.$path);
+			throw new \Exception('Path Not Found: '.$path);
 		self::runCommand('setfacl -m u:"%httpduser%":rwX -m u:`whoami`:rwX %path%', $path);
 		self::runCommand('setfacl -d -m u:"%httpduser%":rwX -m u:`whoami`:rwX %path%', $path);
 	}
 
 	public static function ChmodPermissionsSetter($path) {
 		if (!is_dir($path))
-			throw new Exception('Path Not Found: '.$path);
+			throw new \Exception('Path Not Found: '.$path);
 		self::runCommand('chmod +a "%httpduser% allow delete,write,append,file_inherit,directory_inherit" %path%', $path);
 		self::runCommand('chmod +a "`whoami` allow delete,write,append,file_inherit,directory_inherit" %path%', $path);
 	}
@@ -175,7 +175,7 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	public static function runProcess($commandline) {
 		exec($commandline, $output, $return);
 		if ($return != 0)
-			throw new Exception('Returned Error Code '.$return);
+			throw new \Exception('Returned Error Code '.$return);
 		return implode(PHP_EOL, $output);
 	}
 }
