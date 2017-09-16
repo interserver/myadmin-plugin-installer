@@ -14,6 +14,7 @@ use MyAdmin\Plugins\Command\Command;
 use MyAdmin\Plugins\Command\Parse;
 use MyAdmin\Plugins\Command\CreateUser;
 use MyAdmin\Plugins\Command\UpdatePlugins;
+use MyAdmin\Plugins\Command\SetPermissions;
 
 /**
  * Class CommandProvider
@@ -29,7 +30,8 @@ class CommandProvider implements CommandProviderCapability {
 			new Command,
 			new Parse,
 			new CreateUser,
-			new UpdatePlugins
+			new UpdatePlugins,
+			new SetPermissions
 		];
 	}
 }

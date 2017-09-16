@@ -111,6 +111,12 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 		}*/
 	}
 
+	/**
+	 * An event that triggers setting writable permissions on any directories specified in the writable-dirs composer extra options
+	 *
+	 * @param Event $event
+	 * @return void
+	 */
 	public static function setPermissions(Event $event) {
 		if ('WIN' === strtoupper(substr(PHP_OS, 0, 3))) {
 			$event->getIO()->write('<info>No permissions setup is required on Windows.</info>');
@@ -132,6 +138,12 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 		}
 	}
 
+	/**
+	 * returns a list of writeable directories specified in the writeable-dirs composer extra options
+	 *
+	 * @param Event $event
+	 * @return array an array of directory paths
+	 */
 	public static function getWritableDirs(Event $event) {
 		$configuration = $event->getComposer()->getPackage()->getExtra();
 		if (!isset($configuration['writable-dirs']))
@@ -141,36 +153,34 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 		return $configuration['writable-dirs'];
 	}
 
+	/**
+	 * Sets Writrable Directory permissions for any directories listed in the writeable-dirs option using setfacl
+	 *
+	 * @param Event $event
+	 */
 	public static function setPermissionsSetfacl(Event $event) {
 		$http_user = self::getHttpdUser($event);
 		foreach (self::getWritableDirs($event) as $path)
 			self::SetfaclPermissionsSetter($event, $http_user, $path);
 	}
 
+	/**
+	 * Sets Writrable Directory permissions for any directories listed in the writeable-dirs option using chmod
+	 *
+	 * @param Event $event
+	 */
 	public static function setPermissionsChmod(Event $event) {
 		$http_user = self::getHttpdUser($event);
 		foreach (self::getWritableDirs($event) as $path)
 			self::ChmodPermissionsSetter($event, $http_user, $path);
 	}
 
-	public static function SetfaclPermissionsSetter(Event $event, $http_user, $path) {
-		if (!is_dir($path))
-			mkdir($path, 0777, true);
-		if (!is_dir($path))
-			throw new \Exception('Path Not Found: '.$path);
-		self::runProcess($event, 'setfacl -m u:"'.$http_user.'":rwX -m u:'.$_SERVER['USER'].':rwX '.$path);
-		self::runProcess($event, 'setfacl -d -m u:"'.$http_user.'":rwX -m u:'.$_SERVER['USER'].':rwX '.$path);
-	}
-
-	public static function ChmodPermissionsSetter(Event $event, $http_user, $path) {
-		if (!is_dir($path))
-			mkdir($path, 0777, true);
-		if (!is_dir($path))
-			throw new \Exception('Path Not Found: '.$path);
-		self::runProcess($event, 'chmod +a "'.$http_user.' allow delete,write,append,file_inherit,directory_inherit" '.$path);
-		self::runProcess($event, 'chmod +a "'.$_SERVER['USER'].' allow delete,write,append,file_inherit,directory_inherit" '.$path);
-	}
-
+	/**
+	 * returns the user the webserver is running as
+	 *
+	 * @param Event $event
+	 * @return string the webserver username
+	 */
 	public static function getHttpdUser(Event $event) {
 		$ps = self::runProcess($event, 'ps aux');
 		preg_match_all('/^.*([a]pache|[h]ttpd|[_]www|[w]ww-data|[n]ginx)$/m', $ps, $matches);
@@ -181,6 +191,57 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 		}
 	}
 
+	/**
+	 * sets the needed permissions for the $http_user and the running user on $path using setfacl
+	 *
+	 * @param Event $event
+	 * @param string $http_user the webserver username
+	 * @param string $path the directory to set permissions on
+	 */
+	public static function SetfaclPermissionsSetter(Event $event, $http_user, $path) {
+		self::EnsureDirExists($event, $path);
+		self::runProcess($event, 'setfacl -m u:"'.$http_user.'":rwX -m u:'.$_SERVER['USER'].':rwX '.$path);
+		self::runProcess($event, 'setfacl -d -m u:"'.$http_user.'":rwX -m u:'.$_SERVER['USER'].':rwX '.$path);
+	}
+
+	/**
+	 * sets the needed permissions for the $http_user and the running user on $path using chmod
+	 *
+	 * @param Event $event
+	 * @param string $http_user the webserver username
+	 * @param string $path the directory to set permissions on
+	 */
+	public static function ChmodPermissionsSetter(Event $event, $http_user, $path) {
+		self::EnsureDirExists($event, $path);
+		self::runProcess($event, 'chmod +a "'.$http_user.' allow delete,write,append,file_inherit,directory_inherit" '.$path);
+		self::runProcess($event, 'chmod +a "'.$_SERVER['USER'].' allow delete,write,append,file_inherit,directory_inherit" '.$path);
+	}
+
+	/**
+	 * checks if the given directory exists and if not tries to create it.
+	 *
+	 * @param Event $event
+	 * @param string $path the directory
+	 * @throws \Exception
+	 */
+	public static function EnsureDirExists(Event $event, $path) {
+		if (!is_dir($path)) {
+			mkdir($path, 0777, true);
+			if (!is_dir($path))
+				throw new \Exception('Path Not Found: '.$path);
+			if ($event->getIO()->isVerbose() === TRUE)
+				$event->getIO()->write(sprintf('Created Directory <info>%s</info>', $path));
+		}
+	}
+
+	/**
+	 * runs a command process returning the output and checking return code
+	 *
+	 * @param Event $event
+	 * @param string $commandline the command line to run
+	 * @return string the output
+	 * @throws \Exception
+	 */
 	public static function runProcess(Event $event, $commandline) {
 		if ($event->getIO()->isVerbose() === TRUE)
 			$event->getIO()->write(sprintf('Running <info>%s</info>', $commandline));
