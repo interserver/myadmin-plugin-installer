@@ -57,7 +57,7 @@ class Installer extends LibraryInstaller {
 		$this->type = $type;
 		$this->filesystem = $filesystem ?: new Filesystem();
 		$this->vendorDir = rtrim($composer->getConfig()->get('vendor-dir'), '/');
-		$this->templateDir = $this->vendorDir.'/../public_html/templates';
+		$this->templateDir = $this->vendorDir.'/../include/templates';
 		$this->binaryInstaller = $binaryInstaller ?: new BinaryInstaller($this->io, rtrim($composer->getConfig()->get('bin-dir'), '/'), $composer->getConfig()->get('bin-compat'), $this->filesystem);
 	}
 
