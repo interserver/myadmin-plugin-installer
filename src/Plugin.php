@@ -142,12 +142,12 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	}
 
 	public static function setPermissionsSetfacl(Event $event) {
-		foreach (self::getWritableDirs() as $path)
+		foreach (self::getWritableDirs($event) as $path)
 			self::SetfaclPermissionsSetter($path);
 	}
 
 	public static function setPermissionsChmod(Event $event) {
-		foreach (self::getWritableDirs() as $path)
+		foreach (self::getWritableDirs($event) as $path)
 			self::ChmodPermissionsSetter($path);
 	}
 
