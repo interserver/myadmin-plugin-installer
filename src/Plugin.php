@@ -154,15 +154,15 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	public static function SetfaclPermissionsSetter($path) {
 		if (!is_dir($path))
 			throw new \Exception('Path Not Found: '.$path);
-		self::runCommand('setfacl -m u:"%httpduser%":rwX -m u:`whoami`:rwX %path%', $path);
-		self::runCommand('setfacl -d -m u:"%httpduser%":rwX -m u:`whoami`:rwX %path%', $path);
+		self::runCommand('setfacl -m u:"%httpduser%":rwX -m u:$USER:rwX %path%', $path);
+		self::runCommand('setfacl -d -m u:"%httpduser%":rwX -m u:$USER:rwX %path%', $path);
 	}
 
 	public static function ChmodPermissionsSetter($path) {
 		if (!is_dir($path))
 			throw new \Exception('Path Not Found: '.$path);
 		self::runCommand('chmod +a "%httpduser% allow delete,write,append,file_inherit,directory_inherit" %path%', $path);
-		self::runCommand('chmod +a "`whoami` allow delete,write,append,file_inherit,directory_inherit" %path%', $path);
+		self::runCommand('chmod +a "$USER allow delete,write,append,file_inherit,directory_inherit" %path%', $path);
 	}
 
 	public static function runCommand($command, $path) {
