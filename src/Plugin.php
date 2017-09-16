@@ -170,11 +170,11 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	}
 
 	public static function runCommand(Event $event, $command, $path) {
-		return self::runProcess($event, str_replace(['%httpduser%', '%path%'], [self::getHttpdUser(), $path], $command));
+		return self::runProcess($event, str_replace(['%httpduser%', '%path%'], [self::getHttpdUser($event), $path], $command));
 	}
 
-	public static function getHttpdUser() {
-		$ps = self::runProcess('ps aux');
+	public static function getHttpdUser(Event $event) {
+		$ps = self::runProcess($event, 'ps aux');
 		preg_match_all('/^.*([a]pache|[h]ttpd|[_]www|[w]ww-data|[n]ginx)$/m', $ps, $matches);
 		foreach ($matches[0] as $match) {
 			$user = substr($match, 0, strpos($match, ' '));
