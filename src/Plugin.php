@@ -181,7 +181,6 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	}
 
 	public static function runProcess($commandline) {
-		echo sprintf('<info>Running %s</info>', $commandline) . PHP_EOL;
 		exec($commandline, $output, $return);
 		if ($return != 0)
 			throw new \Exception('Returned Error Code '.$return);
