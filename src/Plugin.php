@@ -21,6 +21,7 @@ use Composer\Plugin\PluginInterface;
 use Composer\Plugin\Capable;
 use Composer\Plugin\PluginEvents;
 use Composer\Plugin\PreFileDownloadEvent;
+use Composer\Script\Event;
 
 /**
  * MyAdmin Installer Plugin
