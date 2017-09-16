@@ -142,31 +142,31 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	}
 
 	public static function setPermissionsSetfacl(Event $event) {
+		$http_user = self::getHttpdUser($event);
 		foreach (self::getWritableDirs($event) as $path)
-			self::SetfaclPermissionsSetter($event, $path);
+			self::SetfaclPermissionsSetter($event, $http_user, $path);
 	}
 
 	public static function setPermissionsChmod(Event $event) {
+		$http_user = self::getHttpdUser($event);
 		foreach (self::getWritableDirs($event) as $path)
-			self::ChmodPermissionsSetter($event, $path);
+			self::ChmodPermissionsSetter($event, $http_user, $path);
 	}
 
-	public static function SetfaclPermissionsSetter(Event $event, $path) {
+	public static function SetfaclPermissionsSetter(Event $event, $http_user, $path) {
 		if (!is_dir($path))
 			mkdir($path, 0777, true);
 		if (!is_dir($path))
 			throw new \Exception('Path Not Found: '.$path);
-		$http_user = self::getHttpdUser($event);
 		self::runProcess($event, 'setfacl -m u:"'.$http_user.'":rwX -m u:'.$_SERVER['USER'].':rwX '.$path);
 		self::runProcess($event, 'setfacl -d -m u:"'.$http_user.'":rwX -m u:'.$_SERVER['USER'].':rwX '.$path);
 	}
 
-	public static function ChmodPermissionsSetter(Event $event, $path) {
+	public static function ChmodPermissionsSetter(Event $event, $http_user, $path) {
 		if (!is_dir($path))
 			mkdir($path, 0777, true);
 		if (!is_dir($path))
 			throw new \Exception('Path Not Found: '.$path);
-		$http_user = self::getHttpdUser($event);
 		self::runProcess($event, 'chmod +a "'.$http_user.' allow delete,write,append,file_inherit,directory_inherit" '.$path);
 		self::runProcess($event, 'chmod +a "'.$_SERVER['USER'].' allow delete,write,append,file_inherit,directory_inherit" '.$path);
 	}
