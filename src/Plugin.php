@@ -175,9 +175,12 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 
 	public static function getHttpdUser() {
 		$ps = self::runProcess('ps aux');
-		preg_match('/^.*([a]pache|[h]ttpd|[_]www|[w]ww-data|[n]ginx)$/m', $ps, $matches);
-		$ps = explode(' ', $matches[0]);
-		return $ps[0];
+		preg_match_all('/^.*([a]pache|[h]ttpd|[_]www|[w]ww-data|[n]ginx)$/m', $ps, $matches);
+		foreach ($matches[0] as $match) {
+			$user = substr($match, 0, strpos($match, ' '));
+			if ($user != 'root')
+				return $user;
+		}
 	}
 
 	public static function runProcess($commandline) {
