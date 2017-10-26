@@ -154,12 +154,12 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	}
 
 	/**
-	 * returns a list of writeable fiiles specified in the writeable-files composer extra options
+	 * returns a list of writeable files specified in the writeable-files composer extra options
 	 *
 	 * @param Event $event
 	 * @return array an array of file paths
 	 */
-	public static function getWritableDirs(Event $event) {
+	public static function getWritableFiles(Event $event) {
 		$configuration = $event->getComposer()->getPackage()->getExtra();
 		if (!isset($configuration['writable-files']))
 			throw new \Exception('The writable-files must be specified in composer arbitrary extra data.');
