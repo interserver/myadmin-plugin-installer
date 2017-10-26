@@ -178,7 +178,8 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 		foreach (self::getWritableDirs($event) as $path)
 			self::SetfaclPermissionsSetter($event, $http_user, $path, 'dir');
 		foreach (self::getWritableFiles($event) as $path)
-			self::SetfaclPermissionsSetter($event, $http_user, $path, 'file');
+			//self::SetfaclPermissionsSetter($event, $http_user, $path, 'file');
+			self::ChmodPermissionsSetter($event, $http_user, $path, 'file');
 	}
 
 	/**
