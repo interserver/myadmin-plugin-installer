@@ -176,9 +176,8 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	public static function setPermissionsSetfacl(Event $event) {
 		$http_user = self::getHttpdUser($event);
 		foreach (self::getWritableDirs($event) as $path)
-			self::SetfaclPermissionsSetter($event, $http_user, $path, 'dir');
+			self::SetfaclPermissionsSetter($event, $http_user, $path);
 		foreach (self::getWritableFiles($event) as $path)
-			//self::SetfaclPermissionsSetter($event, $http_user, $path, 'file');
 			self::ChmodPermissionsSetter($event, $http_user, $path, 'file');
 	}
 
@@ -217,13 +216,9 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	 * @param Event $event
 	 * @param string $http_user the webserver username
 	 * @param string $path the directory to set permissions on
-	 * @param string $type optional type of entry, defaults to dir, can be dir or file
 	 */
-	public static function SetfaclPermissionsSetter(Event $event, $http_user, $path, $type = 'dir') {
-		if ($type == 'dir')
-			self::EnsureDirExists($event, $path);
-		else
-			self::EnsureFileExists($event, $path);
+	public static function SetfaclPermissionsSetter(Event $event, $http_user, $path) {
+		self::EnsureDirExists($event, $path);
 		self::runProcess($event, 'setfacl -m u:"'.$http_user.'":rwX -m u:'.$_SERVER['USER'].':rwX '.$path);
 		self::runProcess($event, 'setfacl -d -m u:"'.$http_user.'":rwX -m u:'.$_SERVER['USER'].':rwX '.$path);
 	}
@@ -237,12 +232,15 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	 * @param string $type optional type of entry, defaults to dir, can be dir or file
 	 */
 	public static function ChmodPermissionsSetter(Event $event, $http_user, $path, $type = 'dir') {
-		if ($type == 'dir')
+		if ($type == 'dir') {
 			self::EnsureDirExists($event, $path);
-		else
+			self::runProcess($event, 'chmod +a "'.$http_user.' allow delete,write,append,file_inherit,directory_inherit" '.$path);
+			self::runProcess($event, 'chmod +a "'.$_SERVER['USER'].' allow delete,write,append,file_inherit,directory_inherit" '.$path);
+		} else {
 			self::EnsureFileExists($event, $path);
-		self::runProcess($event, 'chmod +a "'.$http_user.' allow delete,write,append,file_inherit,directory_inherit" '.$path);
-		self::runProcess($event, 'chmod +a "'.$_SERVER['USER'].' allow delete,write,append,file_inherit,directory_inherit" '.$path);
+			self::runProcess($event, 'chmod 777 '.$path);
+			self::runProcess($event, 'chown '.$_SERVER['USER'].'.'.$http_user.' '.$path);
+		}
 	}
 
 	/**
