@@ -154,6 +154,21 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	}
 
 	/**
+	 * returns a list of writeable fiiles specified in the writeable-files composer extra options
+	 *
+	 * @param Event $event
+	 * @return array an array of file paths
+	 */
+	public static function getWritableDirs(Event $event) {
+		$configuration = $event->getComposer()->getPackage()->getExtra();
+		if (!isset($configuration['writable-files']))
+			throw new \Exception('The writable-files must be specified in composer arbitrary extra data.');
+		if (!is_array($configuration['writable-files']))
+			throw new \Exception('The writable-files must be an array.');
+		return $configuration['writable-files'];
+	}
+
+	/**
 	 * Sets Writrable Directory permissions for any directories listed in the writeable-dirs option using setfacl
 	 *
 	 * @param Event $event
@@ -161,7 +176,9 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	public static function setPermissionsSetfacl(Event $event) {
 		$http_user = self::getHttpdUser($event);
 		foreach (self::getWritableDirs($event) as $path)
-			self::SetfaclPermissionsSetter($event, $http_user, $path);
+			self::SetfaclPermissionsSetter($event, $http_user, $path, 'dir');
+		foreach (self::getWritableFiles($event) as $path)
+			self::SetfaclPermissionsSetter($event, $http_user, $path, 'file');
 	}
 
 	/**
@@ -172,7 +189,9 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	public static function setPermissionsChmod(Event $event) {
 		$http_user = self::getHttpdUser($event);
 		foreach (self::getWritableDirs($event) as $path)
-			self::ChmodPermissionsSetter($event, $http_user, $path);
+			self::ChmodPermissionsSetter($event, $http_user, $path, 'dir');
+		foreach (self::getWritableFiles($event) as $path)
+			self::ChmodPermissionsSetter($event, $http_user, $path, 'file');
 	}
 
 	/**
@@ -197,9 +216,13 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	 * @param Event $event
 	 * @param string $http_user the webserver username
 	 * @param string $path the directory to set permissions on
+	 * @param string $type optional type of entry, defaults to dir, can be dir or file
 	 */
-	public static function SetfaclPermissionsSetter(Event $event, $http_user, $path) {
-		self::EnsureDirExists($event, $path);
+	public static function SetfaclPermissionsSetter(Event $event, $http_user, $path, $type = 'dir') {
+		if ($type == 'dir')
+			self::EnsureDirExists($event, $path);
+		else
+			self::EnsureFileExists($event, $path);
 		self::runProcess($event, 'setfacl -m u:"'.$http_user.'":rwX -m u:'.$_SERVER['USER'].':rwX '.$path);
 		self::runProcess($event, 'setfacl -d -m u:"'.$http_user.'":rwX -m u:'.$_SERVER['USER'].':rwX '.$path);
 	}
@@ -210,9 +233,13 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	 * @param Event $event
 	 * @param string $http_user the webserver username
 	 * @param string $path the directory to set permissions on
+	 * @param string $type optional type of entry, defaults to dir, can be dir or file
 	 */
-	public static function ChmodPermissionsSetter(Event $event, $http_user, $path) {
-		self::EnsureDirExists($event, $path);
+	public static function ChmodPermissionsSetter(Event $event, $http_user, $path, $type = 'dir') {
+		if ($type == 'dir')
+			self::EnsureDirExists($event, $path);
+		else
+			self::EnsureFileExists($event, $path);
 		self::runProcess($event, 'chmod +a "'.$http_user.' allow delete,write,append,file_inherit,directory_inherit" '.$path);
 		self::runProcess($event, 'chmod +a "'.$_SERVER['USER'].' allow delete,write,append,file_inherit,directory_inherit" '.$path);
 	}
@@ -231,6 +258,24 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 				throw new \Exception('Path Not Found: '.$path);
 			if ($event->getIO()->isVerbose() === TRUE)
 				$event->getIO()->write(sprintf('Created Directory <info>%s</info>', $path));
+		}
+	}
+
+	/**
+	 * checks if the given file exists and if not tries to create it.
+	 *
+	 * @param Event $event
+	 * @param string $path the directory
+	 * @throws \Exception
+	 */
+	public static function EnsureFileExists(Event $event, $path) {
+		if (!is_dir(dirname($path))) {
+			mkdir(dirname($path), 0777, true);
+			touch($path);
+			if (!file_exists($path))
+				throw new \Exception('File Not Found: '.$path);
+			if ($event->getIO()->isVerbose() === TRUE)
+				$event->getIO()->write(sprintf('Created File <info>%s</info>', $path));
 		}
 	}
 
