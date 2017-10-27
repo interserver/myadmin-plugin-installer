@@ -234,13 +234,13 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	public static function ChmodPermissionsSetter(Event $event, $http_user, $path, $type = 'dir') {
 		if ($type == 'dir') {
 			self::EnsureDirExists($event, $path);
-			self::runProcess($event, 'chmod +a "'.$http_user.' allow delete,write,append,file_inherit,directory_inherit" '.$path);
-			self::runProcess($event, 'chmod +a "'.$_SERVER['USER'].' allow delete,write,append,file_inherit,directory_inherit" '.$path);
+//			self::runProcess($event, 'chmod +a "'.$http_user.' allow delete,write,append,file_inherit,directory_inherit" '.$path);
+//			self::runProcess($event, 'chmod +a "'.$_SERVER['USER'].' allow delete,write,append,file_inherit,directory_inherit" '.$path);
 		} else {
 			self::EnsureFileExists($event, $path);
-			self::runProcess($event, 'chmod 777 '.$path);
-			self::runProcess($event, 'chown '.$_SERVER['USER'].'.'.$http_user.' '.$path);
 		}
+		self::runProcess($event, 'chmod 777 '.$path);
+		self::runProcess($event, 'chown '.$_SERVER['USER'].'.'.$http_user.' '.$path);
 	}
 
 	/**
