@@ -123,13 +123,13 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 			return;
 		}
 		$event->getIO()->write('Setting up permissions.');
-		try {
+/*		try {
 			self::setPermissionsSetfacl($event);
 			return;
 		} catch (\Exception $setfaclException) {
 			$event->getIO()->write(sprintf('<error>%s</error>', $setfaclException->getMessage()));
 			$event->getIO()->write('<info>Trying chmod...</info>');
-		}
+		}*/
 		try {
 			self::setPermissionsChmod($event);
 			return;
