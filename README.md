@@ -24,5 +24,5 @@ composer require detain/myadmin-plugin-installer
 
 ## License
 
-The Composer backed plugin handler and installer for MyAdmin class is licensed under the LGPL-v2 license.
+The Composer backed plugin handler and installer for MyAdmin class is licensed under the LGPL-v2.1 license.
 
