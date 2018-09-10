@@ -14,11 +14,14 @@
  * @param array|bool $settings
  * @return void
  */
-function register_module($module, $settings = false) {
-	if ($settings === false)
+function register_module($module, $settings = false)
+{
+	if ($settings === false) {
 		$settings = [];
-	if (!isset($GLOBALS['modules']))
+	}
+	if (!isset($GLOBALS['modules'])) {
 		$GLOBALS['modules'] = [];
+	}
 	$modules = $GLOBALS['modules'];
 	$modules[$module] = $settings;
 	$GLOBALS['modules'] = $modules;
@@ -29,7 +32,8 @@ function register_module($module, $settings = false) {
  * @param string $module
  * @return array
  */
-function get_module_stuff($module = 'default') {
+function get_module_stuff($module = 'default')
+{
 	$module = get_module_name($module);
 	return [
 		get_module_db($module),
@@ -45,20 +49,26 @@ function get_module_stuff($module = 'default') {
  * @param string $module the module name your attempting to validate / get the name of
  * @return string the name of the module
  */
-function get_module_name($module = 'default') {
+function get_module_name($module = 'default')
+{
 	if ($module != 'default') {
-		if (isset($GLOBALS[$module.'_dbh']))
+		if (isset($GLOBALS[$module.'_dbh'])) {
 			return $module;
-		if (isset($GLOBALS['modules'][$module]))
+		}
+		if (isset($GLOBALS['modules'][$module])) {
 			return $module;
-		elseif (isset($_REQUEST['module']) && isset($GLOBALS['modules'][$_REQUEST['module']]))
+		} elseif (isset($_REQUEST['module']) && isset($GLOBALS['modules'][$_REQUEST['module']])) {
 			return $_REQUEST['module'];
+		}
 	}
 	$tkeys = array_keys($GLOBALS['modules']);
-	if (count($tkeys) > 0)
-		foreach ($tkeys as $idx => $key)
-			if ($key != 'default')
+	if (count($tkeys) > 0) {
+		foreach ($tkeys as $idx => $key) {
+			if ($key != 'default') {
 				return $key;
+			}
+		}
+	}
 	return 'default';
 }
 
@@ -70,25 +80,29 @@ function get_module_name($module = 'default') {
  * @param bool|string $setting optional parameter, false to return all settings, or a specific setting name to return that setting
  * @return array|false array of settings or false if no setting
  */
-function get_module_settings($module = 'default', $setting = false) {
+function get_module_settings($module = 'default', $setting = false)
+{
 	if (!isset($GLOBALS['modules'][$module])) {
 		$keys = array_keys($GLOBALS['modules']);
 		$module = $keys[0];
 	}
 	if ($setting !== false) {
-		if (isset($GLOBALS['modules'][$module][$setting]))
+		if (isset($GLOBALS['modules'][$module][$setting])) {
 			return $GLOBALS['modules'][$module][$setting];
-		else
+		} else {
 			return false;
-	} else
+		}
+	} else {
 		return $GLOBALS['modules'][$module];
+	}
 }
 
 /**
  * @param $service
  * @return mixed
  */
-function get_service_define($service) {
+function get_service_define($service)
+{
 	return $GLOBALS['tf']->get_service_define($service);
 }
 
@@ -96,7 +110,8 @@ function get_service_define($service) {
  * @param $module
  * @return bool
  */
-function has_module_db($module) {
+function has_module_db($module)
+{
 	return isset($GLOBALS[$module.'_dbh']);
 }
 
@@ -106,7 +121,8 @@ function has_module_db($module) {
  * @param string $module the name of the module to get the dbh for
  * @return Db the database handler resource
  */
-function get_module_db($module) {
+function get_module_db($module)
+{
 	if ($module == 'powerdns') {
 		if (!isset($GLOBALS['powerdns_dbh'])) {
 			$GLOBALS['powerdns_dbh'] = new \MyDb\Mdb2\Db(POWERDNS_DB, POWERDNS_USER, POWERDNS_PASSWORD, POWERDNS_HOST);
@@ -114,11 +130,12 @@ function get_module_db($module) {
 		}
 		return clone $GLOBALS['powerdns_dbh'];
 	} else {
-		if (isset($GLOBALS[$module.'_dbh']))
+		if (isset($GLOBALS[$module.'_dbh'])) {
 			return clone $GLOBALS[$module.'_dbh'];
-		else {
-			if ($module != '' && $module != 'default')
+		} else {
+			if ($module != '' && $module != 'default') {
 				myadmin_log('myadmin', 'info', "Tried to get_module_db(${module}) and GLOBALS[${module}_dbh] does not exist, falling back to GLOBALS['tf']->db", __LINE__, __FILE__);
+			}
 			return clone $GLOBALS['tf']->db;
 		}
 	}
@@ -131,9 +148,11 @@ function get_module_db($module) {
  * @param string $module
  * @return string the/a validated module name
  */
-function get_valid_module($module = 'default') {
-	if (isset($GLOBALS['modules'][$module]))
+function get_valid_module($module = 'default')
+{
+	if (isset($GLOBALS['modules'][$module])) {
 		return $module;
-	else
+	} else {
 		return 'default';
+	}
 }

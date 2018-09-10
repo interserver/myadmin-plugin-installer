@@ -11,6 +11,7 @@
  * @param $function
  * @return bool whether or not it found the given function/class
  */
-function function_requirements($function) {
+function function_requirements($function)
+{
 	return $GLOBALS['tf']->function_requirements($function);
 }

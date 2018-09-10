@@ -18,8 +18,10 @@ use Composer\Command\BaseCommand;
  *
  * @package MyAdmin\Plugins\Command
  */
-class SetPermissions extends BaseCommand {
-	protected function configure() {
+class SetPermissions extends BaseCommand
+{
+	protected function configure()
+	{
 		$this
 			->setName('myadmin:set-permissions') // the name of the command (the part after "bin/console")
 			->setDescription('Creates and Sets Writable Permissions on Required Dirs') // the short description shown while running "php bin/console list"
@@ -33,7 +35,9 @@ class SetPermissions extends BaseCommand {
 	 * @param \Symfony\Component\Console\Input\InputInterface   $input
 	 * @param \Symfony\Component\Console\Output\OutputInterface $output
 	 */
-	protected function initialize(InputInterface $input, OutputInterface $output) {}
+	protected function initialize(InputInterface $input, OutputInterface $output)
+	{
+	}
 
 	/** (optional)
 	 * This method is executed after initialize() and before execute().
@@ -44,7 +48,9 @@ class SetPermissions extends BaseCommand {
 	 * @param \Symfony\Component\Console\Input\InputInterface   $input
 	 * @param \Symfony\Component\Console\Output\OutputInterface $output
 	 */
-	protected function interact(InputInterface $input, OutputInterface $output) {}
+	protected function interact(InputInterface $input, OutputInterface $output)
+	{
+	}
 
 
 	/** (required)
@@ -54,7 +60,8 @@ class SetPermissions extends BaseCommand {
 	 * @param InputInterface $input
 	 * @param OutputInterface $output
 	 */
-	protected function execute(InputInterface $input, OutputInterface $output) {
+	protected function execute(InputInterface $input, OutputInterface $output)
+	{
 		\MyAdmin\Plugins\Plugin::setPermissions();
 	}
 }

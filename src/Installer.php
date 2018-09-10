@@ -38,7 +38,8 @@ use Composer\Repository\InstalledRepositoryInterface;
  *
  * @package MyAdmin\Plugins
  */
-class Installer extends LibraryInstaller {
+class Installer extends LibraryInstaller
+{
 	protected $templateDir;
 
 	/**
@@ -50,7 +51,8 @@ class Installer extends LibraryInstaller {
 	 * @param Filesystem      $filesystem
 	 * @param BinaryInstaller $binaryInstaller
 	 */
-	public function __construct(IOInterface $io, Composer $composer, $type = 'library', Filesystem $filesystem = NULL, BinaryInstaller $binaryInstaller = NULL) {
+	public function __construct(IOInterface $io, Composer $composer, $type = 'library', Filesystem $filesystem = null, BinaryInstaller $binaryInstaller = null)
+	{
 		$this->composer = $composer;
 		$this->downloadManager = $composer->getDownloadManager();
 		$this->io = $io;
@@ -64,7 +66,8 @@ class Installer extends LibraryInstaller {
 	/**
 	 * {@inheritDoc}
 	 */
-	public function supports($packageType) {
+	public function supports($packageType)
+	{
 		return in_array($packageType, [
 			'myadmin-template',
 			'myadmin-module',
@@ -83,7 +86,8 @@ class Installer extends LibraryInstaller {
 	 *
 	 * @return bool
 	 */
-	public function isInstalled(InstalledRepositoryInterface $repo, PackageInterface $package) {
+	public function isInstalled(InstalledRepositoryInterface $repo, PackageInterface $package)
+	{
 		return parent::isInstalled($repo, $package);
 		//return $repo->hasPackage($package) && is_readable($this->getInstallPath($package));
 	}
@@ -91,56 +95,66 @@ class Installer extends LibraryInstaller {
 	/**
 	 * {@inheritDoc}
 	 */
-	public function install(InstalledRepositoryInterface $repo, PackageInterface $package) {
+	public function install(InstalledRepositoryInterface $repo, PackageInterface $package)
+	{
 		$this->initializeVendorDir();
 		$downloadPath = $this->getInstallPath($package);
 		// remove the binaries if it appears the package files are missing
-		if (!is_readable($downloadPath) && $repo->hasPackage($package))
+		if (!is_readable($downloadPath) && $repo->hasPackage($package)) {
 			$this->binaryInstaller->removeBinaries($package);
+		}
 		$this->installCode($package);
 		$this->binaryInstaller->installBinaries($package, $this->getInstallPath($package));
-		if (!$repo->hasPackage($package))
+		if (!$repo->hasPackage($package)) {
 			$repo->addPackage(clone $package);
+		}
 	}
 
 	/**
 	 * {@inheritDoc}
 	 * @throws \InvalidArgumentException
 	 */
-	public function update(InstalledRepositoryInterface $repo, PackageInterface $initial, PackageInterface $target) {
-		if (!$repo->hasPackage($initial))
+	public function update(InstalledRepositoryInterface $repo, PackageInterface $initial, PackageInterface $target)
+	{
+		if (!$repo->hasPackage($initial)) {
 			throw new \InvalidArgumentException('Package is not installed: '.$initial);
+		}
 		$this->initializeVendorDir();
 		$this->binaryInstaller->removeBinaries($initial);
 		$this->updateCode($initial, $target);
 		$this->binaryInstaller->installBinaries($target, $this->getInstallPath($target));
 		$repo->removePackage($initial);
-		if (!$repo->hasPackage($target))
+		if (!$repo->hasPackage($target)) {
 			$repo->addPackage(clone $target);
+		}
 	}
 
 	/**
 	 * {@inheritDoc}
 	 * @throws \InvalidArgumentException
 	 */
-	public function uninstall(InstalledRepositoryInterface $repo, PackageInterface $package) {
-		if (!$repo->hasPackage($package))
+	public function uninstall(InstalledRepositoryInterface $repo, PackageInterface $package)
+	{
+		if (!$repo->hasPackage($package)) {
 			throw new \InvalidArgumentException('Package is not installed: '.$package);
+		}
 		$this->removeCode($package);
 		$this->binaryInstaller->removeBinaries($package);
 		$repo->removePackage($package);
 		$downloadPath = $this->getPackageBasePath($package);
 		if (mb_strpos($package->getName(), '/')) {
 			$packageVendorDir = dirname($downloadPath);
-			if (is_dir($packageVendorDir) && $this->filesystem->isDirEmpty($packageVendorDir))
+			if (is_dir($packageVendorDir) && $this->filesystem->isDirEmpty($packageVendorDir)) {
 				Silencer::call('rmdir', $packageVendorDir);
+			}
 		}
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
-	public function getInstallPath(PackageInterface $package) {
+	public function getInstallPath(PackageInterface $package)
+	{
 		if ($this->type == 'myadmin-template') {
 			$this->initializeTemplateDir();
 			$basePath = ($this->templateDir ? $this->templateDir.'/' : '') . $package->getPrettyName();
@@ -157,8 +171,9 @@ class Installer extends LibraryInstaller {
 	 *
 	 * @param PackageInterface $package Package instance
 	 */
-	public function ensureBinariesPresence(PackageInterface $package) {
-		$this->binaryInstaller->installBinaries($package, $this->getInstallPath($package), FALSE);
+	public function ensureBinariesPresence(PackageInterface $package)
+	{
+		$this->binaryInstaller->installBinaries($package, $this->getInstallPath($package), false);
 	}
 
 	/**
@@ -170,18 +185,21 @@ class Installer extends LibraryInstaller {
 	 * @param  PackageInterface $package
 	 * @return string
 	 */
-	protected function getPackageBasePath(PackageInterface $package) {
+	protected function getPackageBasePath(PackageInterface $package)
+	{
 		$installPath = $this->getInstallPath($package);
 		$targetDir = $package->getTargetDir();
-		if ($targetDir)
+		if ($targetDir) {
 			return preg_replace('{/*'.str_replace('/', '/+', preg_quote($targetDir)).'/?$}', '', $installPath);
+		}
 		return $installPath;
 	}
 
 	/**
 	 * @param \Composer\Package\PackageInterface $package
 	 */
-	protected function installCode(PackageInterface $package) {
+	protected function installCode(PackageInterface $package)
+	{
 		$downloadPath = $this->getInstallPath($package);
 		$this->downloadManager->download($package, $downloadPath);
 	}
@@ -190,7 +208,8 @@ class Installer extends LibraryInstaller {
 	 * @param \Composer\Package\PackageInterface $initial
 	 * @param \Composer\Package\PackageInterface $target
 	 */
-	protected function updateCode(PackageInterface $initial, PackageInterface $target) {
+	protected function updateCode(PackageInterface $initial, PackageInterface $target)
+	{
 		$initialDownloadPath = $this->getInstallPath($initial);
 		$targetDownloadPath = $this->getInstallPath($target);
 		if ($targetDownloadPath !== $initialDownloadPath) {
@@ -211,17 +230,20 @@ class Installer extends LibraryInstaller {
 	/**
 	 * @param \Composer\Package\PackageInterface $package
 	 */
-	protected function removeCode(PackageInterface $package) {
+	protected function removeCode(PackageInterface $package)
+	{
 		$downloadPath = $this->getPackageBasePath($package);
 		$this->downloadManager->remove($package, $downloadPath);
 	}
 
-	protected function initializeVendorDir() {
+	protected function initializeVendorDir()
+	{
 		$this->filesystem->ensureDirectoryExists($this->vendorDir);
 		$this->vendorDir = realpath($this->vendorDir);
 	}
 
-	protected function initializeTemplateDir() {
+	protected function initializeTemplateDir()
+	{
 		$this->filesystem->ensureDirectoryExists($this->templateDir);
 		$this->templateDir = realpath($this->templateDir);
 	}

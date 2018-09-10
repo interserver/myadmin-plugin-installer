@@ -18,8 +18,10 @@ use Composer\Command\BaseCommand;
  *
  * @package MyAdmin\Plugins\Command
  */
-class Command extends BaseCommand {
-	protected function configure() {
+class Command extends BaseCommand
+{
+	protected function configure()
+	{
 		$this
 			// the name of the command (the part after "bin/console")
 			->setName('myadmin')
@@ -27,7 +29,7 @@ class Command extends BaseCommand {
 			->setDescription('Creates a new user.')
 			// the full command description shown when running the command with the "--help" option
 			->setHelp('This command allows you to create a user...');
-			//->addArgument('username', InputArgument::REQUIRED, 'The username of the user.');
+		//->addArgument('username', InputArgument::REQUIRED, 'The username of the user.');
 	}
 
 	/** (optional)
@@ -37,7 +39,9 @@ class Command extends BaseCommand {
 	 * @param \Symfony\Component\Console\Input\InputInterface   $input
 	 * @param \Symfony\Component\Console\Output\OutputInterface $output
 	 */
-	protected function initialize(InputInterface $input, OutputInterface $output) {}
+	protected function initialize(InputInterface $input, OutputInterface $output)
+	{
+	}
 
 	/** (optional)
 	 * This method is executed after initialize() and before execute().
@@ -48,7 +52,9 @@ class Command extends BaseCommand {
 	 * @param \Symfony\Component\Console\Input\InputInterface   $input
 	 * @param \Symfony\Component\Console\Output\OutputInterface $output
 	 */
-	protected function interact(InputInterface $input, OutputInterface $output) {}
+	protected function interact(InputInterface $input, OutputInterface $output)
+	{
+	}
 
 	/** (required)
 	 * This method is executed after interact() and initialize().
@@ -57,12 +63,13 @@ class Command extends BaseCommand {
 	 * @param InputInterface $input
 	 * @param OutputInterface $output
 	 */
-	protected function execute(InputInterface $input, OutputInterface $output) {
+	protected function execute(InputInterface $input, OutputInterface $output)
+	{
 		$output->writeln([ // outputs multiple lines to the console (adding "\n" at the end of each line)
 			'User Creator',
 			'============',
 			''
-		                 ]);
+						 ]);
 		/*
 		$output->writeln('Username: '.$input->getArgument('username')); // retrieve the argument value using getArgument()
 		*/

@@ -25,8 +25,10 @@ use Composer\Command\BaseCommand;
  * Question Helper - http://symfony.com/doc/current/components/console/helpers/questionhelper.html
  *
  */
-class Parse extends BaseCommand {
-	protected function configure() {
+class Parse extends BaseCommand
+{
+	protected function configure()
+	{
 		$this
 			->setName('myadmin:parse') // the name of the command (the part after "bin/console")
 			->setDescription('Parses PHP DocBlocks') // the short description shown while running "php bin/console list"
@@ -40,7 +42,9 @@ class Parse extends BaseCommand {
 	 * @param \Symfony\Component\Console\Input\InputInterface   $input
 	 * @param \Symfony\Component\Console\Output\OutputInterface $output
 	 */
-	protected function initialize(InputInterface $input, OutputInterface $output) {}
+	protected function initialize(InputInterface $input, OutputInterface $output)
+	{
+	}
 
 	/** (optional)
 	 * This method is executed after initialize() and before execute().
@@ -51,7 +55,9 @@ class Parse extends BaseCommand {
 	 * @param \Symfony\Component\Console\Input\InputInterface   $input
 	 * @param \Symfony\Component\Console\Output\OutputInterface $output
 	 */
-	protected function interact(InputInterface $input, OutputInterface $output) {}
+	protected function interact(InputInterface $input, OutputInterface $output)
+	{
+	}
 
 
 	/** (required)
@@ -61,12 +67,13 @@ class Parse extends BaseCommand {
 	 * @param InputInterface $input
 	 * @param OutputInterface $output
 	 */
-	protected function execute(InputInterface $input, OutputInterface $output) {
+	protected function execute(InputInterface $input, OutputInterface $output)
+	{
 		$output->writeln([ // outputs multiple lines to the console (adding "\n" at the end of each line)
 			'MyAdmin DocBlock Parser',
 			'=======================',
 			''
-		                 ]);
+						 ]);
 		$output->writeln('<info>foo</info>'); // green text
 		$output->writeln('<comment>foo</comment>'); // yellow text
 		$output->writeln('<question>foo</question>'); // black text on a cyan background
@@ -99,27 +106,32 @@ class Parse extends BaseCommand {
 		 * @param $calls
 		 * @return array
 		 */
-		function do_call($parent, $call, $calls) {
+		function do_call($parent, $call, $calls)
+		{
 			echo "Running \$parent->$call();".PHP_EOL;
 			$response = $parent->$call();
 			if (isset($calls[$call])) {
 				$out = [];
 				/** @var \phpDocumentor\Reflection\Php\File $file */
-				foreach ($response as $idx => $child)
-					foreach ($calls[$call] as $childCall)
+				foreach ($response as $idx => $child) {
+					foreach ($calls[$call] as $childCall) {
 						/** @var \phpDocumentor\Reflection\Php\File $file */
 						$out[$idx] = $childResponse = $child->$childCall();
-						echo "Running \$child->$childCall();".PHP_EOL;
+					}
+				}
+				echo "Running \$child->$childCall();".PHP_EOL;
 				return $out;
-			} else
+			} else {
 				return $response;
+			}
 		}
 
 		$projectFactory = \phpDocumentor\Reflection\Php\ProjectFactory::createInstance();
 		$files = [];
 		$map = [];
-		foreach ($paths as $path)
+		foreach ($paths as $path) {
 			$files[] = new \phpDocumentor\Reflection\File\LocalFile(__DIR__.'/../../../../../'.$path);
+		}
 		/** @var Project $project */
 		$project = $projectFactory->create('MyProject', $files);
 		$map = do_call($project, 'getFiles', $calls);

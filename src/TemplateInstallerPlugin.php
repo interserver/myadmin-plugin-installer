@@ -18,13 +18,15 @@ use Composer\Plugin\PluginInterface;
  *
  * @package MyAdmin\Plugins
  */
-class TemplateInstallerPlugin implements PluginInterface {
+class TemplateInstallerPlugin implements PluginInterface
+{
 	/**
 	 * @param \Composer\Composer       $composer
 	 * @param \Composer\IO\IOInterface $io
 	 */
-	public function activate(Composer $composer, IOInterface $io) {
-        $installer = new TemplateInstaller($io, $composer);
-        $composer->getInstallationManager()->addInstaller($installer);
-    }
+	public function activate(Composer $composer, IOInterface $io)
+	{
+		$installer = new TemplateInstaller($io, $composer);
+		$composer->getInstallationManager()->addInstaller($installer);
+	}
 }

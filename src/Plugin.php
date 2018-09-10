@@ -26,7 +26,8 @@ use Composer\Script\Event;
 /**
  * MyAdmin Installer Plugin
  */
-class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
+class Plugin implements PluginInterface, EventSubscriberInterface, Capable
+{
 	protected $composer;
 	protected $io;
 
@@ -36,7 +37,8 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	 * @param Composer	$composer
 	 * @param IOInterface $io
 	 */
-	public function activate(Composer $composer, IOInterface $io) {
+	public function activate(Composer $composer, IOInterface $io)
+	{
 		$this->composer = $composer;
 		$this->io = $io;
 		//print 'Hello peoples...';
@@ -47,7 +49,8 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	/**
 	 * @return array
 	 */
-	public function getCapabilities() {
+	public function getCapabilities()
+	{
 		return [
 			'Composer\Plugin\Capability\CommandProvider' => 'MyAdmin\Plugins\CommandProvider'
 		];
@@ -91,7 +94,8 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	 * 			command						occurs before any Composer Command is executed on the CLI. It provides you with access to the input and output objects of the program.
 	 * 			pre-file-download			occurs before files are downloaded and allows you to manipulate the RemoteFilesystem object prior to downloading files based on the URL to be downloaded.
 	 */
-	public static function getSubscribedEvents() {
+	public static function getSubscribedEvents()
+	{
 		return [
 			PluginEvents::PRE_FILE_DOWNLOAD => [
 				['onPreFileDownload', 0]
@@ -102,7 +106,8 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	/**
 	* @param PreFileDownloadEvent $event
 	*/
-	public function onPreFileDownload(PreFileDownloadEvent $event) {
+	public function onPreFileDownload(PreFileDownloadEvent $event)
+	{
 		/*$protocol = parse_url($event->getProcessedUrl(), PHP_URL_SCHEME);
 		if ($protocol === 's3') {
 			$awsClient = new AwsClient($this->io, $this->composer->getConfig());
@@ -117,19 +122,20 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	 * @param Event $event
 	 * @return void
 	 */
-	public static function setPermissions(Event $event) {
+	public static function setPermissions(Event $event)
+	{
 		if ('WIN' === strtoupper(substr(PHP_OS, 0, 3))) {
 			$event->getIO()->write('<info>No permissions setup is required on Windows.</info>');
 			return;
 		}
 		$event->getIO()->write('Setting up permissions.');
-/*		try {
-			self::setPermissionsSetfacl($event);
-			return;
-		} catch (\Exception $setfaclException) {
-			$event->getIO()->write(sprintf('<error>%s</error>', $setfaclException->getMessage()));
-			$event->getIO()->write('<info>Trying chmod...</info>');
-		}*/
+		/*		try {
+					self::setPermissionsSetfacl($event);
+					return;
+				} catch (\Exception $setfaclException) {
+					$event->getIO()->write(sprintf('<error>%s</error>', $setfaclException->getMessage()));
+					$event->getIO()->write('<info>Trying chmod...</info>');
+				}*/
 		try {
 			self::setPermissionsChmod($event);
 			return;
@@ -144,12 +150,15 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	 * @param Event $event
 	 * @return array an array of directory paths
 	 */
-	public static function getWritableDirs(Event $event) {
+	public static function getWritableDirs(Event $event)
+	{
 		$configuration = $event->getComposer()->getPackage()->getExtra();
-		if (!isset($configuration['writable-dirs']))
+		if (!isset($configuration['writable-dirs'])) {
 			throw new \Exception('The writable-dirs must be specified in composer arbitrary extra data.');
-		if (!is_array($configuration['writable-dirs']))
+		}
+		if (!is_array($configuration['writable-dirs'])) {
 			throw new \Exception('The writable-dirs must be an array.');
+		}
 		return $configuration['writable-dirs'];
 	}
 
@@ -159,12 +168,15 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	 * @param Event $event
 	 * @return array an array of file paths
 	 */
-	public static function getWritableFiles(Event $event) {
+	public static function getWritableFiles(Event $event)
+	{
 		$configuration = $event->getComposer()->getPackage()->getExtra();
-		if (!isset($configuration['writable-files']))
+		if (!isset($configuration['writable-files'])) {
 			throw new \Exception('The writable-files must be specified in composer arbitrary extra data.');
-		if (!is_array($configuration['writable-files']))
+		}
+		if (!is_array($configuration['writable-files'])) {
 			throw new \Exception('The writable-files must be an array.');
+		}
 		return $configuration['writable-files'];
 	}
 
@@ -173,12 +185,15 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	 *
 	 * @param Event $event
 	 */
-	public static function setPermissionsSetfacl(Event $event) {
+	public static function setPermissionsSetfacl(Event $event)
+	{
 		$http_user = self::getHttpdUser($event);
-		foreach (self::getWritableDirs($event) as $path)
+		foreach (self::getWritableDirs($event) as $path) {
 			self::SetfaclPermissionsSetter($event, $http_user, $path);
-		foreach (self::getWritableFiles($event) as $path)
+		}
+		foreach (self::getWritableFiles($event) as $path) {
 			self::ChmodPermissionsSetter($event, $http_user, $path, 'file');
+		}
 	}
 
 	/**
@@ -186,12 +201,15 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	 *
 	 * @param Event $event
 	 */
-	public static function setPermissionsChmod(Event $event) {
+	public static function setPermissionsChmod(Event $event)
+	{
 		$http_user = self::getHttpdUser($event);
-		foreach (self::getWritableDirs($event) as $path)
+		foreach (self::getWritableDirs($event) as $path) {
 			self::ChmodPermissionsSetter($event, $http_user, $path, 'dir');
-		foreach (self::getWritableFiles($event) as $path)
+		}
+		foreach (self::getWritableFiles($event) as $path) {
 			self::ChmodPermissionsSetter($event, $http_user, $path, 'file');
+		}
 	}
 
 	/**
@@ -200,13 +218,15 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	 * @param Event $event
 	 * @return string the webserver username
 	 */
-	public static function getHttpdUser(Event $event) {
+	public static function getHttpdUser(Event $event)
+	{
 		$ps = self::runProcess($event, 'ps aux');
 		preg_match_all('/^.*([a]pache|[h]ttpd|[_]www|[w]ww-data|[n]ginx)$/m', $ps, $matches);
 		foreach ($matches[0] as $match) {
 			$user = substr($match, 0, strpos($match, ' '));
-			if ($user != 'root')
+			if ($user != 'root') {
 				return $user;
+			}
 		}
 	}
 
@@ -217,7 +237,8 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	 * @param string $http_user the webserver username
 	 * @param string $path the directory to set permissions on
 	 */
-	public static function SetfaclPermissionsSetter(Event $event, $http_user, $path) {
+	public static function SetfaclPermissionsSetter(Event $event, $http_user, $path)
+	{
 		self::EnsureDirExists($event, $path);
 		self::runProcess($event, 'setfacl -m u:"'.$http_user.'":rwX -m u:'.$_SERVER['USER'].':rwX '.$path);
 		self::runProcess($event, 'setfacl -d -m u:"'.$http_user.'":rwX -m u:'.$_SERVER['USER'].':rwX '.$path);
@@ -231,7 +252,8 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	 * @param string $path the directory to set permissions on
 	 * @param string $type optional type of entry, defaults to dir, can be dir or file
 	 */
-	public static function ChmodPermissionsSetter(Event $event, $http_user, $path, $type = 'dir') {
+	public static function ChmodPermissionsSetter(Event $event, $http_user, $path, $type = 'dir')
+	{
 		if ($type == 'dir') {
 			self::EnsureDirExists($event, $path);
 //			self::runProcess($event, 'chmod +a "'.$http_user.' allow delete,write,append,file_inherit,directory_inherit" '.$path);
@@ -250,13 +272,16 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	 * @param string $path the directory
 	 * @throws \Exception
 	 */
-	public static function EnsureDirExists(Event $event, $path) {
+	public static function EnsureDirExists(Event $event, $path)
+	{
 		if (!is_dir($path)) {
 			mkdir($path, 0777, true);
-			if (!is_dir($path))
+			if (!is_dir($path)) {
 				throw new \Exception('Path Not Found: '.$path);
-			if ($event->getIO()->isVerbose() === TRUE)
+			}
+			if ($event->getIO()->isVerbose() === true) {
 				$event->getIO()->write(sprintf('Created Directory <info>%s</info>', $path));
+			}
 		}
 	}
 
@@ -267,14 +292,17 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	 * @param string $path the directory
 	 * @throws \Exception
 	 */
-	public static function EnsureFileExists(Event $event, $path) {
+	public static function EnsureFileExists(Event $event, $path)
+	{
 		if (!is_dir(dirname($path))) {
 			mkdir(dirname($path), 0777, true);
 			touch($path);
-			if (!file_exists($path))
+			if (!file_exists($path)) {
 				throw new \Exception('File Not Found: '.$path);
-			if ($event->getIO()->isVerbose() === TRUE)
+			}
+			if ($event->getIO()->isVerbose() === true) {
 				$event->getIO()->write(sprintf('Created File <info>%s</info>', $path));
+			}
 		}
 	}
 
@@ -286,12 +314,15 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable {
 	 * @return string the output
 	 * @throws \Exception
 	 */
-	public static function runProcess(Event $event, $commandline) {
-		if ($event->getIO()->isVerbose() === TRUE)
+	public static function runProcess(Event $event, $commandline)
+	{
+		if ($event->getIO()->isVerbose() === true) {
 			$event->getIO()->write(sprintf('Running <info>%s</info>', $commandline));
+		}
 		exec($commandline, $output, $return);
-		if ($return != 0)
+		if ($return != 0) {
 			throw new \Exception('Returned Error Code '.$return);
+		}
 		return implode(PHP_EOL, $output);
 	}
 }

@@ -21,14 +21,16 @@ use Composer\Plugin\PluginInterface;
 /**
  * MyAdmin Installer Plugin
  */
-class InstallerPlugin implements PluginInterface {
+class InstallerPlugin implements PluginInterface
+{
 	/**
 	 * Apply plugin modifications to Composer
 	 *
 	 * @param \Composer\Composer	$composer
 	 * @param \Composer\IO\IOInterface $io
 	 */
-	public function activate(Composer $composer, IOInterface $io) {
+	public function activate(Composer $composer, IOInterface $io)
+	{
 		$installer = new Installer($io, $composer);
 		$composer->getInstallationManager()->addInstaller($installer);
 	}

@@ -12,8 +12,10 @@ use Symfony\Component\Console\Tester\CommandTester;
  *
  * @package Tests\MyAdmin\Plugins\Command
  */
-class CreateUserTest extends KernelTestCase {
-	public function testExecute() {
+class CreateUserTest extends KernelTestCase
+{
+	public function testExecute()
+	{
 		self::bootKernel();
 		$application = new Application(self::$kernel);
 		$application->add(new CreateUserCommand());

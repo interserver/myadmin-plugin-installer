@@ -18,8 +18,10 @@ use Composer\Command\BaseCommand;
  *
  * @package MyAdmin\Plugins\Command
  */
-class UpdatePlugins extends BaseCommand {
-	protected function configure() {
+class UpdatePlugins extends BaseCommand
+{
+	protected function configure()
+	{
 		$this
 			->setName('myadmin:update-plugins') // the name of the command (the part after "bin/console")
 			->setDescription('Finds and Caches Plugins into MyAdmin') // the short description shown while running "php bin/console list"
@@ -33,7 +35,9 @@ class UpdatePlugins extends BaseCommand {
 	 * @param \Symfony\Component\Console\Input\InputInterface   $input
 	 * @param \Symfony\Component\Console\Output\OutputInterface $output
 	 */
-	protected function initialize(InputInterface $input, OutputInterface $output) {}
+	protected function initialize(InputInterface $input, OutputInterface $output)
+	{
+	}
 
 	/** (optional)
 	 * This method is executed after initialize() and before execute().
@@ -44,7 +48,9 @@ class UpdatePlugins extends BaseCommand {
 	 * @param \Symfony\Component\Console\Input\InputInterface   $input
 	 * @param \Symfony\Component\Console\Output\OutputInterface $output
 	 */
-	protected function interact(InputInterface $input, OutputInterface $output) {}
+	protected function interact(InputInterface $input, OutputInterface $output)
+	{
+	}
 
 
 	/** (required)
@@ -54,12 +60,13 @@ class UpdatePlugins extends BaseCommand {
 	 * @param InputInterface $input
 	 * @param OutputInterface $output
 	 */
-	protected function execute(InputInterface $input, OutputInterface $output) {
+	protected function execute(InputInterface $input, OutputInterface $output)
+	{
 		$output->writeln([ // outputs multiple lines to the console (adding "\n" at the end of each line)
 			'User Creator',
 			'============',
 			''
-		                 ]);
+						 ]);
 		$output->write('You are about to '); // outputs a message without adding a "\n" at the end of the line
 		$output->write('create a user.');
 

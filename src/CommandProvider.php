@@ -21,11 +21,13 @@ use MyAdmin\Plugins\Command\SetPermissions;
  *
  * @package MyAdmin\Plugins
  */
-class CommandProvider implements CommandProviderCapability {
+class CommandProvider implements CommandProviderCapability
+{
 	/**
 	 * @return array
 	 */
-	public function getCommands() {
+	public function getCommands()
+	{
 		return [
 			new Command,
 			new Parse,
