@@ -134,7 +134,7 @@ function get_module_db($module)
 			return clone $GLOBALS[$module.'_dbh'];
 		} else {
 			if ($module != '' && $module != 'default') {
-				myadmin_log('myadmin', 'info', "Tried to get_module_db(${module}) and GLOBALS[${module}_dbh] does not exist, falling back to GLOBALS['tf']->db", __LINE__, __FILE__);
+				myadmin_log('myadmin', 'info', "Tried to get_module_db(${module}) and GLOBALS[${module}_dbh] does not exist, falling back to GLOBALS['tf']->db", __LINE__, __FILE__, $module);
 			}
 			return clone $GLOBALS['tf']->db;
 		}
