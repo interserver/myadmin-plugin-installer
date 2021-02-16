@@ -129,6 +129,12 @@ function get_module_db($module)
 			$GLOBALS['powerdns_dbh']->Type = 'mysqli';
 		}
 		return clone $GLOBALS['powerdns_dbh'];
+	} elseif ($module == 'zonemta') {
+		if (!isset($GLOBALS['zonemta_dbh'])) {
+			$GLOBALS['zonemta_dbh'] = new \MyDb\Mysqli\Db(ZONEMTA_MYSQL_DB, ZONEMTA_MYSQL_USERNAME, ZONEMTA_MYSQL_PASSWORD, ZONEMTA_MYSQL_HOST);
+			$GLOBALS['zonemta_dbh']->Type = 'mysqli';
+		}
+		return clone $GLOBALS['zonemta_dbh'];
 	} else {
 		if (isset($GLOBALS[$module.'_dbh'])) {
 			return clone $GLOBALS[$module.'_dbh'];
