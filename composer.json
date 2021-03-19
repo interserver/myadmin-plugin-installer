@@ -4,7 +4,7 @@
 	"type": "composer-plugin",
 	"license": "MIT",
 	"config": {
-		"bin-dir": "vendor\/bin",
+		"bin-dir": "vendor\/bin"
 	},
 	"require": {
 		"composer-plugin-api": "^2.0"
