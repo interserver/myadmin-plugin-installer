@@ -11,6 +11,7 @@
 		"composer-plugin-api": "^2.0"
 	},
 	"require-dev": {
+		"composer/composer": "^2.0",
 		"phpunit/phpunit": "*",
 		"phpunit/phpunit-mock-objects": "*",
 		"vlucas/phpdotenv": "*",
