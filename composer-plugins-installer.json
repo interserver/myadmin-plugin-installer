@@ -1,21 +1,21 @@
 {
-    "name": "detain/myadmin-plugin-installer",
-    "description": "A composer plugin to handle the various types of 3rd party software we deal with in MyAdmin",
-    "type": "composer-plugin",
-    "license": "LGPL-2.1-or-later",
-    "authors": [
-        {
-            "name": "Joe Huss",
-            "email": "detain@interserver.net"
-        }
-    ],
-    "autoload": {
-        "psr-4": {"MyAdmin\\Plugins\\": "src/"}
-    },
-    "require": {
-        "composer-plugin-api": "^1.0"
-    },
-    "extra": {
-         "class":  "MyAdmin\\Plugins\\MyPlugins"
-    }
+	"name": "detain/myadmin-plugin-installer",
+	"description": "A composer plugin to handle the various types of 3rd party software we deal with in MyAdmin",
+	"type": "composer-plugin",
+	"license": "LGPL-2.1-or-later",
+	"authors": [
+		{
+			"name": "Joe Huss",
+			"email": "detain@interserver.net"
+		}
+	],
+	"autoload": {
+		"psr-4": {"MyAdmin\\Plugins\\": "src/"}
+	},
+	"require": {
+		"composer-plugin-api": "^2.0"
+	},
+	"extra": {
+		 "class":  "MyAdmin\\Plugins\\MyPlugins"
+	}
 }
