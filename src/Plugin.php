@@ -105,9 +105,9 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable
 	public static function getSubscribedEvents()
 	{
 		return [
-			PluginEvents::PRE_FILE_DOWNLOAD => [
+/*			PluginEvents::PRE_FILE_DOWNLOAD => [
 				['onPreFileDownload', 0]
-			]
+			]*/
 		];
 	}
 
