@@ -1,24 +1,37 @@
 {
 	"name": "detain/myadmin-plugin-installer",
-	"description": "A composer plugin to handle the various types of 3rd party software we deal with in MyAdmin",
+	"description": "Composer backed plugin handler and installer for MyAdmin",
 	"type": "composer-plugin",
-	"license": "LGPL-2.1-or-later",
-	"authors": [
-		{
-			"name": "Joe Huss",
-			"email": "detain@interserver.net"
-		}
-	],
-	"autoload": {
-		"psr-4": {"MyAdmin\\Plugins\\": "src/"}
+	"license": "MIT",
+	"config": {
+		"bin-dir": "vendor\/bin"
 	},
 	"require": {
 		"composer-plugin-api": "^2.0"
 	},
 	"require-dev": {
-		"composer/composer": "^2.0"
+		"composer/composer": "^2.0",
+		"phpunit/phpunit": "*",
+		"phpunit/phpunit-mock-objects": "*",
+		"vlucas/phpdotenv": "*",
+		"codeclimate/php-test-reporter": "dev-master",
+		"satooshi/php-coveralls": "*",
+		"codacy/coverage": "dev-master",
+		"symfony/framework-bundle": "*"
+	},
+	"minimum-stability": "dev",
+	"autoload": {
+		"psr-4": {
+			"MyAdmin\\Plugins\\": "src/"
+		},
+		"files": [
+			"src/function_requirements.php",
+			"src/modules.php"
+		]
 	},
 	"extra": {
-		 "class":  "MyAdmin\\Plugins\\MyPlugins"
+		"plugin-modifies-install-path": false,
+		"plugin-modifies-downloads": false,
+		"class": "MyAdmin\\Plugins\\Plugin"
 	}
 }

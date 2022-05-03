@@ -30,6 +30,8 @@
 		]
 	},
 	"extra": {
+		"plugin-modifies-install-path": false,
+		"plugin-modifies-downloads": false,
 		"class": "MyAdmin\\Plugins\\Plugin"
 	}
 }
