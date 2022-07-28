@@ -16,15 +16,15 @@
  */
 function register_module($module, $settings = false)
 {
-	if ($settings === false) {
-		$settings = [];
-	}
-	if (!isset($GLOBALS['modules'])) {
-		$GLOBALS['modules'] = [];
-	}
-	$modules = $GLOBALS['modules'];
-	$modules[$module] = $settings;
-	$GLOBALS['modules'] = $modules;
+    if ($settings === false) {
+        $settings = [];
+    }
+    if (!isset($GLOBALS['modules'])) {
+        $GLOBALS['modules'] = [];
+    }
+    $modules = $GLOBALS['modules'];
+    $modules[$module] = $settings;
+    $GLOBALS['modules'] = $modules;
 }
 
 /**
@@ -34,12 +34,12 @@ function register_module($module, $settings = false)
  */
 function get_module_stuff($module = 'default')
 {
-	$module = get_module_name($module);
-	return [
-		get_module_db($module),
-		$module,
-		get_module_settings($module)
-	];
+    $module = get_module_name($module);
+    return [
+        get_module_db($module),
+        $module,
+        get_module_settings($module)
+    ];
 }
 
 /**
@@ -51,25 +51,25 @@ function get_module_stuff($module = 'default')
  */
 function get_module_name($module = 'default')
 {
-	if ($module != 'default') {
-		if (isset($GLOBALS[$module.'_dbh'])) {
-			return $module;
-		}
-		if (isset($GLOBALS['modules'][$module])) {
-			return $module;
-		} elseif (isset($_REQUEST['module']) && isset($GLOBALS['modules'][$_REQUEST['module']])) {
-			return $_REQUEST['module'];
-		}
-	}
-	$tkeys = array_keys($GLOBALS['modules']);
-	if (count($tkeys) > 0) {
-		foreach ($tkeys as $idx => $key) {
-			if ($key != 'default') {
-				return $key;
-			}
-		}
-	}
-	return 'default';
+    if ($module != 'default') {
+        if (isset($GLOBALS[$module.'_dbh'])) {
+            return $module;
+        }
+        if (isset($GLOBALS['modules'][$module])) {
+            return $module;
+        } elseif (isset($_REQUEST['module']) && isset($GLOBALS['modules'][$_REQUEST['module']])) {
+            return $_REQUEST['module'];
+        }
+    }
+    $tkeys = array_keys($GLOBALS['modules']);
+    if (count($tkeys) > 0) {
+        foreach ($tkeys as $idx => $key) {
+            if ($key != 'default') {
+                return $key;
+            }
+        }
+    }
+    return 'default';
 }
 
 /**
@@ -82,19 +82,19 @@ function get_module_name($module = 'default')
  */
 function get_module_settings($module = 'default', $setting = false)
 {
-	if (!isset($GLOBALS['modules'][$module])) {
-		$keys = array_keys($GLOBALS['modules']);
-		$module = $keys[0];
-	}
-	if ($setting !== false) {
-		if (isset($GLOBALS['modules'][$module][$setting])) {
-			return $GLOBALS['modules'][$module][$setting];
-		} else {
-			return false;
-		}
-	} else {
-		return $GLOBALS['modules'][$module];
-	}
+    if (!isset($GLOBALS['modules'][$module])) {
+        $keys = array_keys($GLOBALS['modules']);
+        $module = $keys[0];
+    }
+    if ($setting !== false) {
+        if (isset($GLOBALS['modules'][$module][$setting])) {
+            return $GLOBALS['modules'][$module][$setting];
+        } else {
+            return false;
+        }
+    } else {
+        return $GLOBALS['modules'][$module];
+    }
 }
 
 /**
@@ -103,7 +103,7 @@ function get_module_settings($module = 'default', $setting = false)
  */
 function get_service_define($service)
 {
-	return $GLOBALS['tf']->get_service_define($service);
+    return $GLOBALS['tf']->get_service_define($service);
 }
 
 /**
@@ -112,7 +112,7 @@ function get_service_define($service)
  */
 function has_module_db($module)
 {
-	return isset($GLOBALS[$module.'_dbh']);
+    return isset($GLOBALS[$module.'_dbh']);
 }
 
 /**
@@ -123,28 +123,28 @@ function has_module_db($module)
  */
 function get_module_db($module)
 {
-	if ($module == 'powerdns') {
-		if (!isset($GLOBALS['powerdns_dbh'])) {
-			$GLOBALS['powerdns_dbh'] = new \MyDb\Mdb2\Db(POWERDNS_DB, POWERDNS_USER, POWERDNS_PASSWORD, POWERDNS_HOST);
-			$GLOBALS['powerdns_dbh']->Type = 'mysqli';
-		}
-		return clone $GLOBALS['powerdns_dbh'];
-	} elseif ($module == 'zonemta') {
-		if (!isset($GLOBALS['zonemta_dbh'])) {
-			$GLOBALS['zonemta_dbh'] = new \MyDb\Mysqli\Db(ZONEMTA_MYSQL_DB, ZONEMTA_MYSQL_USERNAME, ZONEMTA_MYSQL_PASSWORD, ZONEMTA_MYSQL_HOST);
-			$GLOBALS['zonemta_dbh']->Type = 'mysqli';
-		}
-		return clone $GLOBALS['zonemta_dbh'];
-	} else {
-		if (isset($GLOBALS[$module.'_dbh'])) {
-			return clone $GLOBALS[$module.'_dbh'];
-		} else {
-			if ($module != '' && $module != 'default') {
-				myadmin_log('myadmin', 'info', "Tried to get_module_db(${module}) and GLOBALS[${module}_dbh] does not exist, falling back to GLOBALS['tf']->db", __LINE__, __FILE__, $module);
-			}
-			return clone $GLOBALS['tf']->db;
-		}
-	}
+    if ($module == 'powerdns') {
+        if (!isset($GLOBALS['powerdns_dbh'])) {
+            $GLOBALS['powerdns_dbh'] = new \MyDb\Mdb2\Db(POWERDNS_DB, POWERDNS_USER, POWERDNS_PASSWORD, POWERDNS_HOST);
+            $GLOBALS['powerdns_dbh']->Type = 'mysqli';
+        }
+        return clone $GLOBALS['powerdns_dbh'];
+    } elseif ($module == 'zonemta') {
+        if (!isset($GLOBALS['zonemta_dbh'])) {
+            $GLOBALS['zonemta_dbh'] = new \MyDb\Mysqli\Db(ZONEMTA_MYSQL_DB, ZONEMTA_MYSQL_USERNAME, ZONEMTA_MYSQL_PASSWORD, ZONEMTA_MYSQL_HOST);
+            $GLOBALS['zonemta_dbh']->Type = 'mysqli';
+        }
+        return clone $GLOBALS['zonemta_dbh'];
+    } else {
+        if (isset($GLOBALS[$module.'_dbh'])) {
+            return clone $GLOBALS[$module.'_dbh'];
+        } else {
+            if ($module != '' && $module != 'default') {
+                myadmin_log('myadmin', 'info', "Tried to get_module_db(${module}) and GLOBALS[${module}_dbh] does not exist, falling back to GLOBALS['tf']->db", __LINE__, __FILE__, $module);
+            }
+            return clone $GLOBALS['tf']->db;
+        }
+    }
 }
 
 /**
@@ -156,9 +156,9 @@ function get_module_db($module)
  */
 function get_valid_module($module = 'default')
 {
-	if (isset($GLOBALS['modules'][$module])) {
-		return $module;
-	} else {
-		return 'default';
-	}
+    if (isset($GLOBALS['modules'][$module])) {
+        return $module;
+    } else {
+        return 'default';
+    }
 }

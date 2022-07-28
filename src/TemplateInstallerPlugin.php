@@ -23,49 +23,40 @@ use Composer\Plugin\PreFileDownloadEvent;
  */
 class TemplateInstallerPlugin implements PluginInterface, EventSubscriberInterface
 {
-	protected $composer;
-	protected $io;
+    protected $composer;
+    protected $io;
 
-	/**
-	 * @param \Composer\Composer       $composer
-	 * @param \Composer\IO\IOInterface $io
-	 */
-	public function activate(Composer $composer, IOInterface $io)
-	{
-		$installer = new TemplateInstaller($io, $composer);
-		$composer->getInstallationManager()->addInstaller($installer);
-	}
+    /**
+     * @param \Composer\Composer       $composer
+     * @param \Composer\IO\IOInterface $io
+     */
+    public function activate(Composer $composer, IOInterface $io)
+    {
+        $this->composer = $composer;
+        $this->io = $io;
+        $installer = new TemplateInstaller($io, $composer);
+        $composer->getInstallationManager()->addInstaller($installer);
+    }
 
-	public function activate(Composer $composer, IOInterface $io)
-	{
-		$this->composer = $composer;
-		$this->io = $io;
-	}
+    public function deactivate(Composer $composer, IOInterface $io)
+    {
+    }
 
-	public function deactivate(Composer $composer, IOInterface $io)
-	{
-	}
+    public function uninstall(Composer $composer, IOInterface $io)
+    {
+    }
 
-	public function uninstall(Composer $composer, IOInterface $io)
-	{
-	}
+    public static function getSubscribedEvents()
+    {
+        return array(
+            PluginEvents::PRE_FILE_DOWNLOAD => array(
+                array('onPreFileDownload', 0)
+            ),
+        );
+    }
 
-	public static function getSubscribedEvents()
-	{
-		return array(
-			PluginEvents::PRE_FILE_DOWNLOAD => array(
-				array('onPreFileDownload', 0)
-			),
-		);
-	}
-
-	public function onPreFileDownload(PreFileDownloadEvent $event)
-	{
-		$protocol = parse_url($event->getProcessedUrl(), PHP_URL_SCHEME);
-	}
-}
-
-
-
-
+    public function onPreFileDownload(PreFileDownloadEvent $event)
+    {
+        $protocol = parse_url($event->getProcessedUrl(), PHP_URL_SCHEME);
+    }
 }

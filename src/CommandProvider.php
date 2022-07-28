@@ -23,17 +23,17 @@ use MyAdmin\Plugins\Command\SetPermissions;
  */
 class CommandProvider implements CommandProviderCapability
 {
-	/**
-	 * @return array
-	 */
-	public function getCommands()
-	{
-		return [
-			new Command,
-			new Parse,
-			new CreateUser,
-			new UpdatePlugins,
-			new SetPermissions
-		];
-	}
+    /**
+     * @return array
+     */
+    public function getCommands()
+    {
+        return [
+            new Command(),
+            new Parse(),
+            new CreateUser(),
+            new UpdatePlugins(),
+            new SetPermissions()
+        ];
+    }
 }

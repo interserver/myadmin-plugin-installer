@@ -13,5 +13,5 @@
  */
 function function_requirements($function)
 {
-	return $GLOBALS['tf']->function_requirements($function);
+    return $GLOBALS['tf']->function_requirements($function);
 }
