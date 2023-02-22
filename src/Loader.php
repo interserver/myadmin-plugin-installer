@@ -32,17 +32,11 @@ class Loader
     /**
      * gets the page routes
      *
-     * @param bool $include_admin
      * @return array of routes
      */
-    public function get_routes($include_admin = false)
+    public function get_routes()
     {
-        //if ($include_admin === FALSE && $GLOBALS['tf']->ima === 'admin')
-        //$include_admin = TRUE;
-        $routes = array_merge($this->public_routes, $this->routes);
-        if ($include_admin === true) {
-            $routes = array_merge($this->admin_routes, $routes);
-        }
+        $routes = $this->routes;
         uksort($routes, function ($a, $b) {
             if (strlen($a) == strlen($b)) {
                 if ($a == $b) {
@@ -55,26 +49,6 @@ class Loader
         });
         //myadmin_log('route', 'debug', json_encode($routes), __LINE__, __FILE__);
         return $routes;
-    }
-
-    /**
-     * gets the admin page routes
-     *
-     * @return array of routes
-     */
-    public function get_admin_routes()
-    {
-        return $this->admin_routes;
-    }
-
-    /**
-     * gets the public page routes
-     *
-     * @return array of routes
-     */
-    public function get_public_routes()
-    {
-        return $this->public_routes;
     }
 
     /**
@@ -91,14 +65,20 @@ class Loader
     /**
      * adds a requirement into the loader and registers it as a page with the router
      *
+     * @param string $type route type  client,admin,public,public_file,client_ajax,public_ajax,admin_ajax
      * @param string $function php function name or class.class_name
      * @param string $source php source file
      * @param string $namespace optional php namespace
+     * @param string $base base path
+     * @param mixed $methods request methods, string or array including get post put head patch etc..
      */
-    public function add_page_requirement($function, $source, $namespace = '')
+    public function add_route_requirement($type, $function, $source, $namespace = '', $path = false, $methods = false)
     {
-        $this->routes['/'.$function] = $namespace.$function;
-        $this->routes['/admin/'.$function] = $namespace.$function;
+        if ($path === false)
+            $path = '/'.$function;
+        if ($methods === false)
+            $methods = ['GET', 'POST'];
+        $this->routes[$path] = [$type, $namespace.$function, $methods];
         $this->add_requirement($function, $source, $namespace);
     }
 
@@ -108,11 +88,25 @@ class Loader
      * @param string $function php function name or class.class_name
      * @param string $source php source file
      * @param string $namespace optional php namespace
+     * @param mixed $methods request methods, string or array including get post put head patch etc..
      */
-    public function add_root_page_requirement($function, $source, $namespace = '')
+    public function add_page_requirement($function, $source, $namespace = '', $methods = false)
     {
-        $this->routes['/'.$function] = $namespace.$function;
-        $this->add_requirement($function, $source, $namespace);
+        $this->add_route_requirement('client', $function, $source, $namespace, '/'.$function, $methods);
+        $this->add_route_requirement('client', $function, $source, $namespace, '/admin/'.$function, $methods);
+    }
+
+    /**
+     * adds a requirement into the loader and registers it as a page with the router
+     *
+     * @param string $function php function name or class.class_name
+     * @param string $source php source file
+     * @param string $namespace optional php namespace
+     * @param mixed $methods request methods, string or array including get post put head patch etc..
+     */
+    public function add_root_page_requirement($function, $source, $namespace = '', $methods = false)
+    {
+        $this->add_route_requirement('client', $function, $source, $namespace, '/'.$function, $methods);
     }
 
     /**
@@ -120,10 +114,23 @@ class Loader
      *
      * @param string $function php function name or class.class_name
      * @param string $path source file path
+     * @param mixed $methods request methods, string or array including get post put head patch etc..
      */
-    public function add_public_path($page, $source)
+    public function add_public_requirement($function, $source, $namespace = '', $methods = false)
     {
-        $this->public_routes['/'.$page] = $source;
+        $this->add_route_requirement('public', $function, $source, $namespace, '/'.$function, $methods);
+    }
+
+    /**
+     * adds a requirement into the loader and registers it as a page with the router
+     *
+     * @param string $function php function name or class.class_name
+     * @param string $source source file path
+     * @param mixed $methods request methods, string or array including get post put head patch etc..
+     */
+    public function add_public_file($function, $source, $methods = false)
+    {
+        $this->add_route_requirement('public_file', $function, $source, '', '/'.$function, $methods);
     }
 
     /**
@@ -132,11 +139,12 @@ class Loader
      * @param string $function php function name or class.class_name
      * @param string $source php source file
      * @param string $namespace optional php namespace
+     * @param mixed $methods request methods, string or array including get post put head patch etc..
      */
-    public function add_ajax_page_requirement($function, $source, $namespace = '')
+    public function add_ajax_page_requirement($function, $source, $namespace = '', $methods = false)
     {
-        $this->routes['/ajax/'.$function] = $namespace.$function;
-        $this->add_requirement($function, $source, $namespace);
+        $this->add_route_requirement('client_ajax', $function, $source, $namespace, '/ajax/'.$function, $methods);
+        $this->add_route_requirement('client_ajax', $function, $source, $namespace, '/admin/ajax/'.$function, $methods);
     }
 
     /**
@@ -145,11 +153,38 @@ class Loader
      * @param string $function php function name or class.class_name
      * @param string $source php source file
      * @param string $namespace optional php namespace
+     * @param mixed $methods request methods, string or array including get post put head patch etc..
      */
-    public function add_admin_page_requirement($function, $source, $namespace = '')
+    public function add_api_page_requirement($function, $source, $namespace = '', $methods = false)
     {
-        $this->admin_routes['/admin/'.$function] = $namespace.$function;
-        $this->add_requirement($function, $source, $namespace);
+        $this->add_route_requirement('client_api', $function, $source, $namespace, '/apiv2/'.$function, $methods);
+        $this->add_route_requirement('client_api', $function, $source, $namespace, '/admin/apiv2/'.$function, $methods);
+    }
+
+    /**
+     * adds a requirement into the loader and registers it as a page with the router
+     *
+     * @param string $function php function name or class.class_name
+     * @param string $source php source file
+     * @param string $namespace optional php namespace
+     * @param mixed $methods request methods, string or array including get post put head patch etc..
+     */
+    public function add_apmin_api_page_requirement($function, $source, $namespace = '', $methods = false)
+    {
+        $this->add_route_requirement('admin_api', $function, $source, $namespace, '/admin/ajax/'.$function, $methods);
+    }
+
+    /**
+     * adds a requirement into the loader and registers it as a page with the router
+     *
+     * @param string $function php function name or class.class_name
+     * @param string $source php source file
+     * @param string $namespace optional php namespace
+     * @param mixed $methods request methods, string or array including get post put head patch etc..
+     */
+    public function add_admin_page_requirement($function, $source, $namespace = '', $methods = false)
+    {
+        $this->add_route_requirement('admin', $function, $source, $namespace, '/admin/'.$function, $methods);
     }
 
     /**
@@ -158,8 +193,9 @@ class Loader
      * @param string $function php function name or class.class_name
      * @param string $source php source file
      * @param string $namespace optional php namespace
+     * @param mixed $methods request methods, string or array including get post put head patch etc..
      */
-    public function add_requirement($function, $source, $namespace = '')
+    public function add_requirement($function, $source, $namespace = '', $methods = false)
     {
         $this->requirements[$function] = $namespace.$source;
     }
