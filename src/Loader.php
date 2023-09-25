@@ -71,14 +71,15 @@ class Loader
      * @param string $base base path
      * @param mixed $methods request methods, string or array including get post put head patch etc..
      */
-    public function add_route_requirement($type, $function, $source, $path = false, $methods = false)
+    public function add_route_requirement($type, $function, $source = '', $path = false, $methods = false)
     {
         if ($path === false)
             $path = '/'.$function;
         if ($methods === false)
             $methods = ['GET', 'POST'];
         $this->routes[$path] = [$type, $function, $methods];
-        $this->add_requirement($function, $source);
+        if ($source != '')
+            $this->add_requirement($function, $source);
     }
 
     /**
