@@ -48,11 +48,11 @@ class TemplateInstallerPlugin implements PluginInterface, EventSubscriberInterfa
 
     public static function getSubscribedEvents()
     {
-        return array(
-            PluginEvents::PRE_FILE_DOWNLOAD => array(
-                array('onPreFileDownload', 0)
-            ),
-        );
+        return [
+            PluginEvents::PRE_FILE_DOWNLOAD => [
+                ['onPreFileDownload', 0]
+            ],
+        ];
     }
 
     public function onPreFileDownload(PreFileDownloadEvent $event)
