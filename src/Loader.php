@@ -73,13 +73,16 @@ class Loader
      */
     public function add_route_requirement($type, $function, $source = '', $path = false, $methods = false)
     {
-        if ($path === false)
+        if ($path === false) {
             $path = '/'.$function;
-        if ($methods === false)
+        }
+        if ($methods === false) {
             $methods = ['GET', 'POST'];
+        }
         $this->routes[$path] = [$type, $function, $methods];
-        if ($source != '')
+        if ($source != '') {
             $this->add_requirement($function, $source);
+        }
     }
 
     /**
