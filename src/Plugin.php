@@ -270,7 +270,7 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable
             self::EnsureFileExists($event, $path);
         }
         self::runProcess($event, 'chmod 777 '.$path);
-        self::runProcess($event, 'chown '.$_SERVER['USER'].'.'.$http_user.' '.$path);
+        self::runProcess($event, 'chown '.$_SERVER['USER'].':'.$http_user.' '.$path);
     }
 
     /**
