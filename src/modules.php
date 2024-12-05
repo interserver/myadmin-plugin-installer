@@ -3,7 +3,7 @@
  * Pre-Config Functions.   This stuff is called almost instantly
  * so it needs to be defined before any of the rest of the program can go.
  * @author Joe Huss <detain@interserver.net>
- * @copyright 2019
+ * @copyright 2025
  * @package MyAdmin
  * @category Config
  */

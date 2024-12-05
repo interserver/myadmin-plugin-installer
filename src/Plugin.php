@@ -2,7 +2,7 @@
 /**
  * Plugins Management
  * @author Joe Huss <detain@interserver.net>
- * @copyright 2019
+ * @copyright 2025
  * @package MyAdmin
  * @category Plugins
  */
@@ -84,8 +84,7 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable
      *
      *		Installer Events				Composer\Installer\InstallerEvent
      *
-     * 			pre-dependencies-solving	occurs before the dependencies are resolved.
-     * 			post-dependencies-solving	occurs after the dependencies have been resolved.
+     *          pre-operations-exec         occurs before the install/upgrade/.. operations are executed when installing a lock file. Plugins that need to hook into this event will need to be installed globally to be usable, as otherwise they would not be loaded yet when a fresh install of a project happens.
      *
      *		Package Events					Composer\Installer\PackageEvent
      *
@@ -98,16 +97,27 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable
      *
      * 		Plugin Events					Composer\Plugin\PluginEvents
      *
-     * 			init						occurs after a Composer instance is done being initialized.
-     * 			command						occurs before any Composer Command is executed on the CLI. It provides you with access to the input and output objects of the program.
-     * 			pre-file-download			occurs before files are downloaded and allows you to manipulate the RemoteFilesystem object prior to downloading files based on the URL to be downloaded.
+     *          init                        occurs after a Composer instance is done being initialized.
+     *          command                     occurs before any Composer Command is executed on the CLI. It provides you with access to the input and output objects of the program.
+     *          pre-file-download           occurs before files are downloaded and allows you to manipulate the HttpDownloader object prior to downloading files based on the URL to be downloaded.
+     *          post-file-download          occurs after package dist files are downloaded and allows you to perform additional checks on the file if required.
+     *          pre-command-run             occurs before a command is executed and allows you to manipulate the InputInterface object's options and arguments to tweak a command's behavior.
+     *          pre-pool-create             occurs before the Pool of packages is created, and lets you filter the list of packages that is going to enter the Solver.
+ 
      */
     public static function getSubscribedEvents()
     {
         return [
-/*			PluginEvents::PRE_FILE_DOWNLOAD => [
+/*
+            PluginEvents::INIT => [],
+            PluginEvents::COMMAND => [],
+            PluginEvents::PRE_FILE_DOWNLOAD => [
                 ['onPreFileDownload', 0]
-            ]*/
+            ],
+            PluginEvents::POST_FILE_DOWNLOAD => [],
+            PluginEvents::PRE_COMMAND_RUN => [],
+            PluginEvents::PRE_POOL_CREATE => [],
+            */
         ];
     }
 

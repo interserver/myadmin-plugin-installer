@@ -14,11 +14,13 @@
 		"phpunit/phpunit": "*",
 		"phpunit/phpunit-mock-objects": "*",
 		"vlucas/phpdotenv": "*",
-		"codeclimate/php-test-reporter": "dev-master",
 		"satooshi/php-coveralls": "*",
 		"codacy/coverage": "dev-master",
 		"symfony/framework-bundle": "*"
 	},
+    "suggest-dev": {
+            "codeclimate/php-test-reporter": "dev-master"
+    },
 	"minimum-stability": "dev",
 	"autoload": {
 		"psr-4": {
