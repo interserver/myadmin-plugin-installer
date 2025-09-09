@@ -119,7 +119,7 @@ function has_module_db($module)
  * gets the database handler for a given module
  *
  * @param string $module the name of the module to get the dbh for
- * @return Db the database handler resource
+ * @return MyDb\Generic the database handler resource
  */
 function get_module_db($module)
 {
@@ -148,7 +148,7 @@ function get_module_db($module)
             } else {
                 return clone $default_dbh;
             }
-            
+
         }
     }
 }
