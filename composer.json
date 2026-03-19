@@ -1,27 +1,21 @@
 {
 	"name": "detain/myadmin-plugin-installer",
-	"description": "Composer backed plugin handler and installer for MyAdmin",
+	"description": "Composer-based plugin handler and custom installer for the MyAdmin control panel. Provides package type routing for templates, modules, plugins, and menus with integrated Composer command support.",
 	"type": "composer-plugin",
 	"license": "MIT",
 	"config": {
-		"bin-dir": "vendor\/bin"
+		"bin-dir": "vendor/bin"
 	},
 	"require": {
+		"php": ">=8.2",
 		"composer-plugin-api": "^2.0"
 	},
 	"require-dev": {
 		"composer/composer": "^2.0",
-		"phpunit/phpunit": "*",
-		"phpunit/phpunit-mock-objects": "*",
-		"vlucas/phpdotenv": "*",
-		"satooshi/php-coveralls": "*",
-		"codacy/coverage": "dev-master",
-		"symfony/framework-bundle": "*"
+		"phpunit/phpunit": "^9.6"
 	},
-    "suggest-dev": {
-            "codeclimate/php-test-reporter": "dev-master"
-    },
 	"minimum-stability": "dev",
+	"prefer-stable": true,
 	"autoload": {
 		"psr-4": {
 			"MyAdmin\\Plugins\\": "src/"
@@ -30,6 +24,11 @@
 			"src/function_requirements.php",
 			"src/modules.php"
 		]
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"Tests\\MyAdmin\\Plugins\\": "tests/"
+		}
 	},
 	"extra": {
 		"plugin-modifies-install-path": false,

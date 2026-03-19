@@ -35,7 +35,7 @@ class SetPermissions extends BaseCommand
      * @param \Symfony\Component\Console\Input\InputInterface   $input
      * @param \Symfony\Component\Console\Output\OutputInterface $output
      */
-    protected function initialize(InputInterface $input, OutputInterface $output)
+    protected function initialize(InputInterface $input, OutputInterface $output): void
     {
     }
 
@@ -48,7 +48,7 @@ class SetPermissions extends BaseCommand
      * @param \Symfony\Component\Console\Input\InputInterface   $input
      * @param \Symfony\Component\Console\Output\OutputInterface $output
      */
-    protected function interact(InputInterface $input, OutputInterface $output)
+    protected function interact(InputInterface $input, OutputInterface $output): void
     {
     }
 
@@ -60,8 +60,10 @@ class SetPermissions extends BaseCommand
      * @param InputInterface $input
      * @param OutputInterface $output
      */
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         \MyAdmin\Plugins\Plugin::setPermissions();
+
+        return 0;
     }
 }

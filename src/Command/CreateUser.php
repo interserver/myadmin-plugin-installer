@@ -48,7 +48,7 @@ class CreateUser extends BaseCommand
      * @param \Symfony\Component\Console\Input\InputInterface   $input
      * @param \Symfony\Component\Console\Output\OutputInterface $output
      */
-    protected function initialize(InputInterface $input, OutputInterface $output)
+    protected function initialize(InputInterface $input, OutputInterface $output): void
     {
     }
 
@@ -61,7 +61,7 @@ class CreateUser extends BaseCommand
      * @param \Symfony\Component\Console\Input\InputInterface   $input
      * @param \Symfony\Component\Console\Output\OutputInterface $output
      */
-    protected function interact(InputInterface $input, OutputInterface $output)
+    protected function interact(InputInterface $input, OutputInterface $output): void
     {
     }
 
@@ -72,7 +72,7 @@ class CreateUser extends BaseCommand
      * @param InputInterface $input
      * @param OutputInterface $output
      */
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $output->writeln([ // outputs multiple lines to the console (adding "\n" at the end of each line)
             'User Creator',
@@ -125,5 +125,7 @@ class CreateUser extends BaseCommand
         /** Question Helper
          * @link http://symfony.com/doc/current/components/console/helpers/questionhelper.html
          */
+
+        return 0;
     }
 }
