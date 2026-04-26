@@ -140,10 +140,10 @@ function get_module_db($module)
             return clone $GLOBALS[$module.'_dbh'];
         } else {
             if ($module != '' && $module != 'default') {
-                myadmin_log('myadmin', 'info', "Tried to get_module_db({$module}) and GLOBALS[{$module}_dbh] does not exist, falling back to GLOBALS['tf']->db", __LINE__, __FILE__, $module);
+                myadmin_log('myadmin', 'info', "Tried to get_module_db({$module}) and GLOBALS[{$module}_dbh] does not exist, falling back to App::db()", __LINE__, __FILE__, $module);
             }
-            global $default_dbh, $tf;
-            if (is_object($tf) && method_exists($tf, 'db')) {
+            global $default_dbh;
+            if (\MyAdmin\App::has(\MyAdmin\tf::class)) {
                 return clone \MyAdmin\App::db();
             } else {
                 return clone $default_dbh;
