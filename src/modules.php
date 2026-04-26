@@ -103,7 +103,7 @@ function get_module_settings($module = 'default', $setting = false)
  */
 function get_service_define($service)
 {
-    return $GLOBALS['tf']->get_service_define($service);
+    return \MyAdmin\App::getServiceDefine($service);
 }
 
 /**
@@ -144,7 +144,7 @@ function get_module_db($module)
             }
             global $default_dbh, $tf;
             if (is_object($tf) && method_exists($tf, 'db')) {
-                return clone $tf->db;
+                return clone \MyAdmin\App::db();
             } else {
                 return clone $default_dbh;
             }
