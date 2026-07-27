@@ -2,71 +2,71 @@
 
 namespace Tests\MyAdmin\Plugins\Command;
 
+use Composer\Command\BaseCommand;
 use MyAdmin\Plugins\Command\UpdatePlugins;
 use PHPUnit\Framework\TestCase;
-use ReflectionClass;
+use Tests\MyAdmin\Plugins\Support\SourceInspection;
 
 /**
- * Test suite for the UpdatePlugins command class.
- *
- * Tests class structure and command configuration.
+ * Test suite for the UpdatePlugins command.
  *
  * @covers \MyAdmin\Plugins\Command\UpdatePlugins
  */
 class UpdatePluginsTest extends TestCase
 {
-    /**
-     * Test that UpdatePlugins extends BaseCommand.
-     */
-    public function testExtendsBaseCommand(): void
+    use SourceInspection;
+
+    /** @var UpdatePlugins */
+    private $command;
+
+    protected function setUp(): void
     {
-        $ref = new ReflectionClass(UpdatePlugins::class);
-        $this->assertSame('Composer\Command\BaseCommand', $ref->getParentClass()->getName());
+        $this->command = new UpdatePlugins();
+    }
+
+    public function testIsAComposerCommand(): void
+    {
+        $this->assertInstanceOf(BaseCommand::class, $this->command);
+    }
+
+    public function testIsNamedAndDescribed(): void
+    {
+        $this->assertSame('myadmin:update-plugins', $this->command->getName());
+        $this->assertNotEmpty($this->command->getDescription());
+        $this->assertNotEmpty($this->command->getHelp());
+    }
+
+    public function testOffersDryRunAndShowSkippedOptions(): void
+    {
+        $definition = $this->command->getDefinition();
+        $this->assertTrue($definition->hasOption('dry-run'));
+        $this->assertTrue($definition->hasOption('show-skipped'));
     }
 
     /**
-     * Test that the command name is 'myadmin:update-plugins'.
+     * The previous body was Symfony demo scaffolding: it printed "User Creator" and
+     * `<info>foo</info>` then returned 0 without touching a single plugin, despite a
+     * description promising to find and cache them.
      */
-    public function testCommandNameIsMyadminUpdatePlugins(): void
+    public function testNoLongerContainsDemoScaffolding(): void
     {
-        $command = new UpdatePlugins();
-        $this->assertSame('myadmin:update-plugins', $command->getName());
+        $source = $this->codeOf(UpdatePlugins::class);
+        $this->assertStringNotContainsString('User Creator', $source);
+        $this->assertStringNotContainsString('<info>foo</info>', $source);
+        $this->assertStringNotContainsString('formatSection', $source);
     }
 
-    /**
-     * Test that the command has a description set.
-     */
-    public function testCommandHasDescription(): void
+    public function testDelegatesToThePluginScanner(): void
     {
-        $command = new UpdatePlugins();
-        $this->assertNotEmpty($command->getDescription());
+        $source = $this->codeOf(UpdatePlugins::class);
+        $this->assertStringContainsString('PluginScanner', $source);
+        $this->assertStringContainsString('rebuild(', $source);
     }
 
-    /**
-     * Test that the command description mentions plugins.
-     */
-    public function testCommandDescriptionMentionsPlugins(): void
+    public function testHelpDocumentsThePresenceBasedPruningRule(): void
     {
-        $command = new UpdatePlugins();
-        $this->assertStringContainsString('Plugins', $command->getDescription());
-    }
-
-    /**
-     * Test that the command has help text set.
-     */
-    public function testCommandHasHelp(): void
-    {
-        $command = new UpdatePlugins();
-        $this->assertNotEmpty($command->getHelp());
-    }
-
-    /**
-     * Test that execute method exists and is protected.
-     */
-    public function testExecuteIsProtected(): void
-    {
-        $ref = new ReflectionClass(UpdatePlugins::class);
-        $method = $ref->getMethod('execute');
-        $this->assertTrue($method->isProtected());
+        $help = $this->command->getHelp();
+        $this->assertStringContainsString('pruned', $help);
+        $this->assertStringContainsString('disk', $help);
     }
 }

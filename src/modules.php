@@ -61,12 +61,14 @@ function get_module_name($module = 'default')
             return $_REQUEST['module'];
         }
     }
-    $tkeys = array_keys($GLOBALS['modules']);
-    if (count($tkeys) > 0) {
-        foreach ($tkeys as $idx => $key) {
-            if ($key != 'default') {
-                return $key;
-            }
+    // $GLOBALS['modules'] is populated by register_module(). Guard it: array_keys(null) is a
+    // fatal TypeError in PHP 8, and this function is reachable before any module registers.
+    if (!isset($GLOBALS['modules']) || !is_array($GLOBALS['modules'])) {
+        return 'default';
+    }
+    foreach (array_keys($GLOBALS['modules']) as $key) {
+        if ($key != 'default') {
+            return $key;
         }
     }
     return 'default';
@@ -82,9 +84,18 @@ function get_module_name($module = 'default')
  */
 function get_module_settings($module = 'default', $setting = false)
 {
+    // Guard the whole lookup: with no modules registered, the previous code did
+    // array_keys(null) then $keys[0] on an empty array, emitting "Undefined array key 0" and
+    // returning null where every caller expects false.
+    if (!isset($GLOBALS['modules']) || !is_array($GLOBALS['modules']) || $GLOBALS['modules'] === []) {
+        return false;
+    }
     if (!isset($GLOBALS['modules'][$module])) {
         $keys = array_keys($GLOBALS['modules']);
         $module = $keys[0];
+    }
+    if (!is_array($GLOBALS['modules'][$module])) {
+        return false;
     }
     if ($setting !== false) {
         if (isset($GLOBALS['modules'][$module][$setting])) {

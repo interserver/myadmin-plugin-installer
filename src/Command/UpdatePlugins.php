@@ -9,110 +9,115 @@
 
 namespace MyAdmin\Plugins\Command;
 
-use Symfony\Component\Console\Input\InputInterface;
-use Symfony\Component\Console\Output\OutputInterface;
 use Composer\Command\BaseCommand;
+use MyAdmin\Plugins\PluginScanner;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
+use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * Class UpdatePlugins
+ * `composer myadmin:update-plugins`
  *
- * @package MyAdmin\Plugins\Command
+ * Rebuilds include/config/hooks.json and include/config/plugins.json from the plugin
+ * packages actually installed in vendor/.
+ *
+ * This is the CLI counterpart to the automatic rebuild on post-autoload-dump. Before this
+ * existed the ONLY way to refresh those dispatch tables was for an administrator to load the
+ * admin Plugins page in a browser — there was no command-line path at all, and the previous
+ * body of this command was Symfony demo boilerplate that printed "User Creator" and exited 0
+ * without touching anything.
+ *
+ * @see \MyAdmin\Plugins\PluginScanner
  */
 class UpdatePlugins extends BaseCommand
 {
+    /**
+     * Declares the command name, description and options.
+     *
+     * @return void
+     */
     protected function configure()
     {
         $this
-            ->setName('myadmin:update-plugins') // the name of the command (the part after "bin/console")
-            ->setDescription('Finds and Caches Plugins into MyAdmin') // the short description shown while running "php bin/console list"
-            ->setHelp('This command allows you to create a user...'); // the full command description shown when running the command with the "--help" option
+            ->setName('myadmin:update-plugins')
+            ->setDescription('Finds and Caches Plugins into MyAdmin')
+            ->setHelp(
+                'Scans vendor/ for packages shipping a src/Plugin.php with a getHooks() method and'
+                .' rebuilds include/config/hooks.json and include/config/plugins.json from them.'
+                .PHP_EOL.PHP_EOL
+                .'Entries are pruned only when the package is genuinely gone from disk. A package that'
+                .' is installed but cannot be evaluated here — several reference MyAdmin constants that'
+                .' only exist once config.inc.php is loaded — keeps its existing entry rather than'
+                .' being dropped.'
+            )
+            ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Report what would change without writing')
+            ->addOption('show-skipped', null, InputOption::VALUE_NONE, 'List packages that could not be evaluated, and why');
     }
 
-    /** (optional)
-     * This method is executed before the interact() and the execute() methods.
-     * Its main purpose is to initialize variables used in the rest of the command methods.
+    /**
+     * Runs the rebuild.
+     *
+     * INPUT:   $input  — supports --dry-run and --show-skipped.
+     *          $output — unused; output goes through Composer's IO channel.
+     * RETURNS: int — 0 on success, 1 when Composer is unavailable, the project is not a
+     *          MyAdmin checkout, no plugins were found, or a write was refused.
      *
      * @param \Symfony\Component\Console\Input\InputInterface   $input
      * @param \Symfony\Component\Console\Output\OutputInterface $output
-     */
-    protected function initialize(InputInterface $input, OutputInterface $output): void
-    {
-    }
-
-    /** (optional)
-     * This method is executed after initialize() and before execute().
-     * Its purpose is to check if some of the options/arguments are missing and interactively
-     * ask the user for those values. This is the last place where you can ask for missing
-     * options/arguments. After this command, missing options/arguments will result in an error.
-     *
-     * @param \Symfony\Component\Console\Input\InputInterface   $input
-     * @param \Symfony\Component\Console\Output\OutputInterface $output
-     */
-    protected function interact(InputInterface $input, OutputInterface $output): void
-    {
-    }
-
-
-    /** (required)
-     * This method is executed after interact() and initialize().
-     * It contains the logic you want the command to execute.
-     *
-     * @param InputInterface $input
-     * @param OutputInterface $output
+     * @return int
      */
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $output->writeln([ // outputs multiple lines to the console (adding "\n" at the end of each line)
-            'User Creator',
-            '============',
-            ''
-                         ]);
-        $output->write('You are about to '); // outputs a message without adding a "\n" at the end of the line
-        $output->write('create a user.');
+        $composer = $this->tryComposer();
+        $io = $this->getIO();
+        if ($composer === null) {
+            $io->writeError('<error>No composer.json found; run this from a project directory.</error>');
+            return 1;
+        }
+        $root = dirname(rtrim((string)$composer->getConfig()->get('vendor-dir'), '/'));
+        if (!is_dir($root.'/include/config')) {
+            $io->writeError(sprintf('<error>%s does not look like a MyAdmin checkout (no include/config).</error>', $root));
+            return 1;
+        }
+        $dryRun = (bool)$input->getOption('dry-run');
+        $scanner = PluginScanner::forProjectRoot($root);
+        $result = $scanner->rebuild($dryRun);
 
-        /** Coloring
-         * @link http://symfony.com/doc/current/console/coloring.html
-         */
-        $output->writeln('<info>foo</info>'); // green text
-        $output->writeln('<comment>foo</comment>'); // yellow text
-        $output->writeln('<question>foo</question>'); // black text on a cyan background
-        $output->writeln('<error>foo</error>'); // white text on a red background
-
-        /** Formatting
-         * @link http://symfony.com/doc/current/components/console/helpers/formatterhelper.html
-         */
-        $formatter = $this->getHelper('formatter');
-        // Section - [SomeSection] Here is some message related to that section
-        $formattedLine = $formatter->formatSection('SomeSection', 'Here is some message related to that section');
-        $output->writeln($formattedLine);
-        // Error Block
-        $errorMessages = ['Error!', 'Something went wrong'];
-        $formattedBlock = $formatter->formatBlock($errorMessages, 'error');
-        $output->writeln($formattedBlock);
-        // Truncated Messages
-        $message = 'This is a very long message, which should be truncated';
-        $truncatedMessage = $formatter->truncate($message, 7); // This is...
-        $truncatedMessage = $formatter->truncate($message, 7, '!!'); // result: This is!!
-        $output->writeln($truncatedMessage);
-
-        /** Table
-         * @link http://symfony.com/doc/current/components/console/helpers/table.html
-         */
-
-        /** Style
-         * @link http://symfony.com/doc/current/console/style.html
-         */
-
-        /** Process Helper
-         * @link http://symfony.com/doc/current/components/console/helpers/processhelper.html
-         */
-        /** Progress Bar
-         * @link http://symfony.com/doc/current/components/console/helpers/progressbar.html
-         */
-        /** Question Helper
-         * @link http://symfony.com/doc/current/components/console/helpers/questionhelper.html
-         */
-
-        return 0;
+        $io->write(sprintf(
+            '<info>%d plugin package(s) on disk; %d evaluated, %d retained from the existing config.</info>',
+            $result['present'],
+            $result['scanned'],
+            $result['retained']
+        ));
+        if ($result['scanned'] === 0) {
+            $io->writeError('<error>No plugins could be evaluated; refusing to write.</error>');
+            return 1;
+        }
+        $exit = 0;
+        foreach (['hooks', 'plugins'] as $file) {
+            $r = $result[$file];
+            $io->write(sprintf('<comment>%s.json</comment>: +%d / -%d', $file, count($r['added']), count($r['removed'])));
+            foreach ($r['added'] as $name) {
+                $io->write('  <info>+</info> '.$name);
+            }
+            foreach ($r['removed'] as $name) {
+                $io->write('  <comment>-</comment> '.$name);
+            }
+            if (!$dryRun && $r['written'] !== true && ($r['added'] !== [] || $r['removed'] !== [])) {
+                $io->writeError(sprintf('<error>Failed to write %s.json; it was left unchanged.</error>', $file));
+                $exit = 1;
+            }
+        }
+        if ($input->getOption('show-skipped')) {
+            foreach ($result['skipped'] as $package => $reason) {
+                $io->write(sprintf('  <comment>skipped</comment> %s: %s', $package, $reason));
+            }
+        } elseif ($result['skipped'] !== []) {
+            $io->write(sprintf('<comment>%d package(s) could not be evaluated; re-run with --show-skipped for details.</comment>', count($result['skipped'])));
+        }
+        if ($dryRun) {
+            $io->write('<comment>Dry run — nothing was written.</comment>');
+        }
+        return $exit;
     }
 }

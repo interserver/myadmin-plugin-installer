@@ -171,15 +171,77 @@ class LoaderTest extends TestCase
     }
 
     /**
-     * Test add_apmin_api_page_requirement creates an admin API route.
+     * add_admin_api_page_requirement registers under /admin/apiv2/, mirroring the /apiv2/
+     * convention used by add_api_page_requirement().
      */
     public function testAddAdminApiPageRequirementCreatesAdminApiRoute(): void
+    {
+        $this->loader->add_admin_api_page_requirement('admin_action', 'admin_api.php');
+
+        $routes = $this->loader->get_routes();
+        $this->assertArrayHasKey('/admin/apiv2/admin_action', $routes);
+        $this->assertSame('admin_api', $routes['/admin/apiv2/admin_action'][0]);
+    }
+
+    /**
+     * Regression: the misspelled legacy alias must forward to the corrected route rather
+     * than registering under /admin/ajax/, where it silently overwrote the client_ajax
+     * registration made by add_ajax_page_requirement().
+     */
+    public function testMisspelledAliasForwardsToCorrectAdminApiRoute(): void
     {
         $this->loader->add_apmin_api_page_requirement('admin_action', 'admin_api.php');
 
         $routes = $this->loader->get_routes();
-        $this->assertArrayHasKey('/admin/ajax/admin_action', $routes);
-        $this->assertSame('admin_api', $routes['/admin/ajax/admin_action'][0]);
+        $this->assertArrayHasKey('/admin/apiv2/admin_action', $routes);
+        $this->assertArrayNotHasKey('/admin/ajax/admin_action', $routes);
+    }
+
+    /**
+     * Regression: add_ajax_page_requirement and the admin-API registration must no longer
+     * collide on /admin/ajax/<name>.
+     */
+    public function testAjaxAndAdminApiRoutesDoNotCollide(): void
+    {
+        $this->loader->add_ajax_page_requirement('thing', 'thing.php');
+        $this->loader->add_admin_api_page_requirement('thing', 'thing.php');
+
+        $routes = $this->loader->get_routes();
+        $this->assertSame('client_ajax', $routes['/admin/ajax/thing'][0]);
+        $this->assertSame('client_ajax', $routes['/ajax/thing'][0]);
+        $this->assertSame('admin_api', $routes['/admin/apiv2/thing'][0]);
+    }
+
+    /**
+     * Regression: add_public_file() used to pass six arguments to a five-parameter method.
+     * The surplus '' shifted $path to '' and $methods to the string '/'.$function, so every
+     * call registered under the empty-string route key and stored a string where the router
+     * expects an array of HTTP methods.
+     */
+    public function testAddPublicFileRegistersUnderItsOwnPath(): void
+    {
+        $this->loader->add_public_file('robots.txt', 'robots.php');
+
+        $routes = $this->loader->get_routes();
+        $this->assertArrayNotHasKey('', $routes, 'must not register under the empty-string key');
+        $this->assertArrayHasKey('/robots.txt', $routes);
+        $this->assertSame('public_file', $routes['/robots.txt'][0]);
+        $this->assertIsArray($routes['/robots.txt'][2], 'methods slot must be an array, not a path string');
+        $this->assertSame(['GET', 'POST'], $routes['/robots.txt'][2]);
+    }
+
+    /**
+     * Two add_public_file() calls must produce two distinct routes, not overwrite each other
+     * on a shared empty key.
+     */
+    public function testMultipleAddPublicFileCallsDoNotCollide(): void
+    {
+        $this->loader->add_public_file('robots.txt', 'robots.php');
+        $this->loader->add_public_file('sitemap.xml', 'sitemap.php');
+
+        $routes = $this->loader->get_routes();
+        $this->assertArrayHasKey('/robots.txt', $routes);
+        $this->assertArrayHasKey('/sitemap.xml', $routes);
     }
 
     /**

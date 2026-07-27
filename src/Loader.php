@@ -123,7 +123,16 @@ class Loader
     }
 
     /**
-     * adds a requirement into the loader and registers it as a page with the router
+     * adds a requirement into the loader and registers it as a public file with the router
+     *
+     * Registers at /<function> with route type public_file.
+     *
+     * FIXED: this used to pass SIX arguments to add_route_requirement(), which takes five.
+     * The extra '' shifted everything along, so $path received '' and $methods received the
+     * string '/'.$function. Every call therefore registered under the EMPTY-STRING route key
+     * — colliding with each other — and put a string where the router expects an array of
+     * HTTP methods. PHP does not error on surplus arguments to a userland function, so this
+     * failed silently. No caller exists today, which is why it went unnoticed.
      *
      * @param string $function php function name or class.class_name
      * @param string $source source file path
@@ -131,7 +140,7 @@ class Loader
      */
     public function add_public_file($function, $source, $methods = false)
     {
-        $this->add_route_requirement('public_file', $function, $source, '', '/'.$function, $methods);
+        $this->add_route_requirement('public_file', $function, $source, '/'.$function, $methods);
     }
 
     /**
@@ -161,7 +170,28 @@ class Loader
     }
 
     /**
-     * adds a requirement into the loader and registers it as a page with the router
+     * adds a requirement into the loader and registers it as an admin API page
+     *
+     * Registers at /admin/apiv2/<function> with route type admin_api, mirroring
+     * add_api_page_requirement()'s /apiv2/ convention.
+     *
+     * @param string $function php function name or class.class_name
+     * @param string $source php source file
+     * @param mixed $methods request methods, string or array including get post put head patch etc..
+     */
+    public function add_admin_api_page_requirement($function, $source, $methods = false)
+    {
+        $this->add_route_requirement('admin_api', $function, $source, '/admin/apiv2/'.$function, $methods);
+    }
+
+    /**
+     * @deprecated Misspelled ("apmin"), and it registered under /admin/ajax/ rather than
+     *             /admin/apiv2/ — which collided with add_ajax_page_requirement(), silently
+     *             overwriting that route's client_ajax registration with an admin_api one.
+     *             Use add_admin_api_page_requirement() instead.
+     *
+     * Retained as a forwarder so any out-of-tree caller keeps working; it now registers the
+     * correct /admin/apiv2/ path. No caller exists in this repo or in vendor/detain/.
      *
      * @param string $function php function name or class.class_name
      * @param string $source php source file
@@ -169,7 +199,7 @@ class Loader
      */
     public function add_apmin_api_page_requirement($function, $source, $methods = false)
     {
-        $this->add_route_requirement('admin_api', $function, $source, '/admin/ajax/'.$function, $methods);
+        $this->add_admin_api_page_requirement($function, $source, $methods);
     }
 
     /**

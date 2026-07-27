@@ -26,13 +26,62 @@ class InstallerTest extends TestCase
     }
 
     /**
-     * Test that Installer has a protected templateDir property.
+     * The template-routing feature is gone. It branched on $this->type — the installer's own
+     * constructor label, always 'library' because nothing ever passed one — rather than on
+     * the package's type, so it could never fire in any configuration.
      */
-    public function testHasTemplateDirProperty(): void
+    public function testTemplateRoutingSurfaceIsGone(): void
     {
         $ref = new ReflectionClass(Installer::class);
-        $prop = $ref->getProperty('templateDir');
-        $this->assertTrue($prop->isProtected());
+        $this->assertFalse($ref->hasProperty('templateDir'));
+        $this->assertFalse($ref->hasMethod('initializeTemplateDir'));
+    }
+
+    /**
+     * Every InstallerInterface method must be overridden on this class with a signature
+     * PHP accepts. Loading the class at all proves signature compatibility; this pins that
+     * none of them silently disappear.
+     */
+    public function testOverridesEveryInstallerInterfaceMethod(): void
+    {
+        $ref = new ReflectionClass(Installer::class);
+        $interface = new ReflectionClass(\Composer\Installer\InstallerInterface::class);
+        foreach ($interface->getMethods() as $method) {
+            $name = $method->getName();
+            $this->assertTrue($ref->hasMethod($name), $name.'() is missing');
+            $this->assertSame(
+                Installer::class,
+                $ref->getMethod($name)->getDeclaringClass()->getName(),
+                $name.'() must be declared locally, not merely inherited'
+            );
+        }
+    }
+
+    /**
+     * Composer 2 added download(), prepare() and cleanup() to InstallerInterface. The
+     * previous revision predated them and implemented only the Composer 1 method set.
+     */
+    public function testHasComposerTwoAsyncMethods(): void
+    {
+        $ref = new ReflectionClass(Installer::class);
+        foreach (['download', 'prepare', 'cleanup'] as $method) {
+            $this->assertTrue($ref->hasMethod($method), $method.'() is required by Composer 2');
+        }
+    }
+
+    /**
+     * prepare() and cleanup() must NOT type-hint $type as string. InstallerInterface declares
+     * the hint but LibraryInstaller does not, and this class extends LibraryInstaller — adding
+     * it would be a signature-compatibility fatal at class-load time.
+     */
+    public function testPrepareAndCleanupLeaveTypeParameterUnhinted(): void
+    {
+        $ref = new ReflectionClass(Installer::class);
+        foreach (['prepare', 'cleanup'] as $name) {
+            $param = $ref->getMethod($name)->getParameters()[0];
+            $this->assertSame('type', $param->getName());
+            $this->assertFalse($param->hasType(), $name.'($type) must stay unhinted to match LibraryInstaller');
+        }
     }
 
     /**
@@ -211,13 +260,19 @@ class InstallerTest extends TestCase
     }
 
     /**
-     * Test that initializeTemplateDir method exists and is protected.
+     * supports() claims exactly the MyAdmin package types and nothing else. This list is
+     * consulted ahead of Composer's catch-all LibraryInstaller because addInstaller()
+     * prepends, so widening it silently takes packages away from default handling.
      */
-    public function testInitializeTemplateDirIsProtected(): void
+    public function testSupportsClaimsOnlyMyAdminTypes(): void
     {
-        $ref = new ReflectionClass(Installer::class);
-        $method = $ref->getMethod('initializeTemplateDir');
-        $this->assertTrue($method->isProtected());
+        $installer = $this->createInstallerStub();
+        foreach (Installer::MYADMIN_PACKAGE_TYPES as $type) {
+            $this->assertTrue($installer->supports($type), $type.' should be claimed');
+        }
+        foreach (['library', 'composer-plugin', 'metapackage', 'project', ''] as $type) {
+            $this->assertFalse($installer->supports($type), $type.' must not be claimed');
+        }
     }
 
     /**

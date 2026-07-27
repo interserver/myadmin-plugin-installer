@@ -53,12 +53,48 @@ class PluginTest extends TestCase
     }
 
     /**
-     * Test that getSubscribedEvents currently returns empty array (all commented out).
+     * The plugin must subscribe to the full Composer event surface, not an empty array.
+     * This previously asserted emptiness, which locked in the broken state.
      */
-    public function testGetSubscribedEventsIsCurrentlyEmpty(): void
+    public function testGetSubscribedEventsCoversTheFullSurface(): void
     {
         $events = Plugin::getSubscribedEvents();
-        $this->assertEmpty($events);
+        $this->assertNotEmpty($events);
+        // 6 PluginEvents + 12 ScriptEvents + 6 PackageEvents + 1 InstallerEvents
+        $this->assertCount(25, $events);
+    }
+
+    /**
+     * Every subscribed event name must be a real Composer constant value, and every handler
+     * must be a method that actually exists — a typo here fails silently at runtime.
+     */
+    public function testEverySubscribedEventResolvesToAnExistingHandler(): void
+    {
+        $known = array_merge(
+            array_values((new ReflectionClass(\Composer\Plugin\PluginEvents::class))->getConstants()),
+            array_values((new ReflectionClass(\Composer\Script\ScriptEvents::class))->getConstants()),
+            array_values((new ReflectionClass(\Composer\Installer\PackageEvents::class))->getConstants()),
+            array_values((new ReflectionClass(\Composer\Installer\InstallerEvents::class))->getConstants())
+        );
+        foreach (Plugin::getSubscribedEvents() as $event => $handler) {
+            $this->assertContains($event, $known, sprintf('"%s" is not a Composer event constant', $event));
+            $method = is_array($handler) ? (is_array($handler[0]) ? $handler[0][0] : $handler[0]) : $handler;
+            $this->assertTrue(
+                method_exists(Plugin::class, $method),
+                sprintf('handler %s() for "%s" does not exist', $method, $event)
+            );
+        }
+    }
+
+    /**
+     * Composer 1's dependency-solving events were removed in 2.x. Referencing them would be
+     * a silent no-op, so guard against them creeping back in.
+     */
+    public function testDoesNotSubscribeToRemovedComposerOneEvents(): void
+    {
+        $events = array_keys(Plugin::getSubscribedEvents());
+        $this->assertNotContains('pre-dependencies-solving', $events);
+        $this->assertNotContains('post-dependencies-solving', $events);
     }
 
     /**

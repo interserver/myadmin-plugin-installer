@@ -1,12 +1,24 @@
 ---
 name: phpunit-test
-description: Writes PHPUnit 9 tests following the project's ReflectionClass-based pattern. Uses newInstanceWithoutConstructor() stubs, tests interface implementation, method visibility, and parameter counts. Use when user says 'add tests', 'write test', 'test coverage for'. Do NOT use for running existing tests.
+description: Writes behavioural PHPUnit 9 tests for this package. Prefers real objects and fixture trees over reflection; uses reflection only to pin signature contracts that PHP itself enforces. Use when user says 'add tests', 'write test', 'test coverage for'. Do NOT use for running existing tests.
 ---
 # PHPUnit Test Writer
 
 ## Critical
 
-- **Never mock Composer vendor classes** (`Composer\Installer\LibraryInstaller`, `Composer\Command\BaseCommand`, etc.) with `createMock()`. Use `ReflectionClass::newInstanceWithoutConstructor()` to create stubs that bypass constructor dependencies.
+- **Assert behaviour, not shape.** A test that only checks a method exists, is public, or has N parameters passes whether or not the code works. An earlier version of this suite was ~48% such tests and concealed three real bugs, including a guaranteed `ArgumentCountError` in a command and a route registration that silently collided on an empty key. If you cannot describe the failure your test would catch, it is not yet a test.
+- **Reach for real objects first.** Much of Composer is directly constructible and needs no mocking:
+  - `new RootPackage('test/root', '1.0.0.0', '1.0.0')` + `setExtra([...])`
+  - `new Composer()` + `setPackage($rootPackage)`
+  - `new BufferIO()` — lets you assert on emitted output
+  - `new Event('post-install-cmd', $composer, $io)`
+  See `tests/PluginPermissionsTest.php`.
+- **Build real fixtures for filesystem and git behaviour.** `tests/PluginScannerTest.php` writes a temp vendor tree; `tests/VendorGuardTest.php` runs `git init`. Neither can be meaningfully mocked. Clean up in `tearDown()`.
+- **Never `createMock()` a Composer class you could construct.** Where construction genuinely is not possible, `ReflectionClass::newInstanceWithoutConstructor()` is the fallback — but note it caps what you can test to methods that never touch `$this`, which is exactly how `Installer` ended up with one meaningful test.
+- **Reflection is for signature contracts only** — the cases where PHP's own compatibility rules are the thing under test. Example: `prepare()`/`cleanup()` must leave `$type` unhinted to stay compatible with `LibraryInstaller`, so `tests/InstallerTest.php` asserts `$param->hasType() === false`.
+- **Scanning source text?** Use the `SourceInspection` trait's `codeOf()`, which strips comments. A raw `file_get_contents()` scan matches the docblocks describing what was removed, so the assertion passes or fails for the wrong reason.
+- **`clearstatcache(true, $path)`** before asserting on `fileperms()` — an earlier `is_dir()`/`file_exists()` populates the stat cache before your `chmod` lands.
+- **Fixture classes need a unique namespace per test.** `include_once` in a single process makes a repeated class name fatal.
 - **Namespace must match directory**: `Tests\MyAdmin\Plugins\` → `tests/`, `Tests\MyAdmin\Plugins\Command\` → `tests/Command/`.
 - **Every test class** must extend `PHPUnit\Framework\TestCase` and include a `@covers` annotation pointing to the class under test.
 - **Every test method** must have `: void` return type and a PHPDoc `/** */` block describing what it tests.
@@ -248,21 +260,26 @@ If any test fails, diagnose via the error output — do not blindly remove the t
    - `testGetSubscribedEventsContainsPreFileDownload()` — `assertArrayHasKey()`
 4. Run `vendor/bin/phpunit tests/TemplateInstallerPluginTest.php` — all pass
 
-**Result:** 6 tests, 6 assertions, matching the project's reflection-based pattern.
+**Result:** tests that fail if the behaviour breaks, not merely if the method is renamed.
 
-### Example: User says "write test for Command/CreateUser"
+### Example: User says "write test for Command/SetPermissions"
 
 **Actions taken:**
-1. Read `src/Command/CreateUser.php` — extends `BaseCommand`, has `configure()` and `execute()` methods, defines `username` argument
-2. Create `tests/Command/CreateUserTest.php` with namespace `Tests\MyAdmin\Plugins\Command`
-3. Write tests:
-   - `testExtendsBaseCommand()` — reflection parent class check
-   - `testCommandName()` — `new CreateUser()`, assert `getName()` returns `'myadmin:create-user'`
-   - `testCommandHasDescription()` — `assertNotEmpty($command->getDescription())`
-   - `testConfigureIsProtected()` — reflection visibility
-   - `testExecuteIsProtected()` — reflection visibility
-   - `testHasUsernameArgument()` — `$command->getDefinition()->hasArgument('username')`
-4. Run `vendor/bin/phpunit tests/Command/CreateUserTest.php` — all pass
+1. Read `src/Command/SetPermissions.php` — extends `BaseCommand`, builds a `Script\Event`, offers `--dry-run`
+2. Create `tests/Command/SetPermissionsTest.php`, namespace `Tests\MyAdmin\Plugins\Command`
+3. Write tests that assert behaviour:
+   - `testIsNamedAndDescribed()` — `getName()`, `getDescription()`, `getHelp()` on a real instance
+   - `testOffersADryRunOption()` — `getDefinition()->hasOption('dry-run')` **and** that it does not accept a value
+   - `testTakesNoArguments()` — `getDefinition()->getArguments()` is empty
+   - `testExecuteBuildsTheEventThatSetPermissionsRequires()` — regression: `execute()` used to call
+     `Plugin::setPermissions()` with zero arguments against a signature requiring an `Event`, a guaranteed
+     `ArgumentCountError`. Uses `codeOf()` so docblocks describing the old bug do not match.
+   - `testSetPermissionsSignatureIsUnchanged()` — reflection, legitimately: pins that the collaborator still
+     takes exactly one required `Composer\Script\Event`
+4. Run `vendor/bin/phpunit tests/Command/SetPermissionsTest.php` — all pass
+
+Note what is absent: no `testConfigureIsProtected()`, no `testExecuteIsProtected()`. Those pass whether or not
+the command works.
 
 ## Common Issues
 

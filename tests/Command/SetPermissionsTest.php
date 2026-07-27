@@ -2,71 +2,82 @@
 
 namespace Tests\MyAdmin\Plugins\Command;
 
+use Composer\Command\BaseCommand;
 use MyAdmin\Plugins\Command\SetPermissions;
 use PHPUnit\Framework\TestCase;
-use ReflectionClass;
+use ReflectionMethod;
+use Tests\MyAdmin\Plugins\Support\SourceInspection;
 
 /**
- * Test suite for the SetPermissions command class.
- *
- * Tests class structure and command configuration.
+ * Test suite for the SetPermissions command.
  *
  * @covers \MyAdmin\Plugins\Command\SetPermissions
  */
 class SetPermissionsTest extends TestCase
 {
-    /**
-     * Test that SetPermissions extends BaseCommand.
-     */
-    public function testExtendsBaseCommand(): void
+    use SourceInspection;
+
+    /** @var SetPermissions */
+    private $command;
+
+    protected function setUp(): void
     {
-        $ref = new ReflectionClass(SetPermissions::class);
-        $this->assertSame('Composer\Command\BaseCommand', $ref->getParentClass()->getName());
+        $this->command = new SetPermissions();
+    }
+
+    public function testIsAComposerCommand(): void
+    {
+        $this->assertInstanceOf(BaseCommand::class, $this->command);
+    }
+
+    public function testIsNamedAndDescribed(): void
+    {
+        $this->assertSame('myadmin:set-permissions', $this->command->getName());
+        $this->assertNotEmpty($this->command->getDescription());
+        $this->assertNotEmpty($this->command->getHelp());
+    }
+
+    public function testOffersADryRunOption(): void
+    {
+        $this->assertTrue($this->command->getDefinition()->hasOption('dry-run'));
+        $this->assertFalse(
+            $this->command->getDefinition()->getOption('dry-run')->acceptValue(),
+            '--dry-run is a flag, not a value option'
+        );
+    }
+
+    public function testTakesNoArguments(): void
+    {
+        $this->assertSame([], $this->command->getDefinition()->getArguments());
     }
 
     /**
-     * Test that the command name is 'myadmin:set-permissions'.
+     * Regression for the guaranteed ArgumentCountError: execute() used to call
+     * Plugin::setPermissions() with zero arguments against a signature requiring a
+     * Composer\Script\Event. It now builds the Event, so the only call site must pass one.
      */
-    public function testCommandNameIsMyadminSetPermissions(): void
+    public function testExecuteBuildsTheEventThatSetPermissionsRequires(): void
     {
-        $command = new SetPermissions();
-        $this->assertSame('myadmin:set-permissions', $command->getName());
+        $source = $this->codeOf(SetPermissions::class);
+        $this->assertStringContainsString('new Event(', $source, 'execute() must construct a Script\Event');
+        $this->assertStringNotContainsString(
+            'Plugin::setPermissions()',
+            $source,
+            'setPermissions() must never be called with no arguments'
+        );
     }
 
     /**
-     * Test that the command has a description set.
+     * The Plugin method this command drives must still accept exactly one required Event.
      */
-    public function testCommandHasDescription(): void
+    public function testSetPermissionsSignatureIsUnchanged(): void
     {
-        $command = new SetPermissions();
-        $this->assertNotEmpty($command->getDescription());
-    }
-
-    /**
-     * Test that the command description mentions permissions.
-     */
-    public function testCommandDescriptionMentionsPermissions(): void
-    {
-        $command = new SetPermissions();
-        $this->assertStringContainsString('Permissions', $command->getDescription());
-    }
-
-    /**
-     * Test that the command has help text set.
-     */
-    public function testCommandHasHelp(): void
-    {
-        $command = new SetPermissions();
-        $this->assertNotEmpty($command->getHelp());
-    }
-
-    /**
-     * Test that execute method exists and is protected.
-     */
-    public function testExecuteIsProtected(): void
-    {
-        $ref = new ReflectionClass(SetPermissions::class);
-        $method = $ref->getMethod('execute');
-        $this->assertTrue($method->isProtected());
+        $method = new ReflectionMethod('MyAdmin\Plugins\Plugin', 'setPermissions');
+        $this->assertTrue($method->isStatic());
+        $this->assertSame(1, $method->getNumberOfRequiredParameters());
+        $this->assertSame(
+            'Composer\Script\Event',
+            (string)$method->getParameters()[0]->getType()
+        );
     }
 }

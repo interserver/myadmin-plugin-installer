@@ -2,120 +2,96 @@
 
 namespace Tests\MyAdmin\Plugins;
 
+use Composer\Command\BaseCommand;
+use Composer\Plugin\Capability\Capability;
+use Composer\Plugin\Capability\CommandProvider as CommandProviderCapability;
+use MyAdmin\Plugins\Command\Command;
+use MyAdmin\Plugins\Command\SetPermissions;
+use MyAdmin\Plugins\Command\UpdatePlugins;
 use MyAdmin\Plugins\CommandProvider;
 use PHPUnit\Framework\TestCase;
-use ReflectionClass;
 
 /**
- * Test suite for the CommandProvider class.
- *
- * Tests interface implementation and command registration.
+ * Test suite for the CommandProvider capability.
  *
  * @covers \MyAdmin\Plugins\CommandProvider
  */
 class CommandProviderTest extends TestCase
 {
-    /**
-     * Test that CommandProvider implements Composer CommandProvider capability.
-     */
-    public function testImplementsCommandProviderCapability(): void
+    public function testImplementsTheCommandProviderCapability(): void
     {
-        $ref = new ReflectionClass(CommandProvider::class);
-        $this->assertTrue(
-            $ref->implementsInterface(\Composer\Plugin\Capability\CommandProvider::class)
-        );
+        $provider = new CommandProvider();
+        $this->assertInstanceOf(CommandProviderCapability::class, $provider);
+        $this->assertInstanceOf(Capability::class, $provider);
     }
 
     /**
-     * Test that getCommands returns an array.
+     * Composer constructs a capability with exactly one argument: an array carrying
+     * 'composer', 'io' and 'plugin'. A constructor that cannot accept that shape fails at
+     * runtime rather than at load time, so pin it here.
      */
-    public function testGetCommandsReturnsArray(): void
+    public function testAcceptsComposerCapabilityConstructorPayload(): void
+    {
+        $provider = new CommandProvider(['composer' => null, 'io' => null, 'plugin' => null]);
+        $this->assertCount(3, $provider->getCommands());
+    }
+
+    public function testIsConstructibleWithNoArguments(): void
     {
         $provider = new CommandProvider();
-        $commands = $provider->getCommands();
-        $this->assertIsArray($commands);
+        $this->assertCount(3, $provider->getCommands());
     }
 
     /**
-     * Test that getCommands returns exactly 5 commands.
+     * Composer throws UnexpectedValueException on any element that is not a BaseCommand.
      */
-    public function testGetCommandsReturnsFiveCommands(): void
+    public function testEveryCommandIsABaseCommand(): void
     {
-        $provider = new CommandProvider();
-        $commands = $provider->getCommands();
-        $this->assertCount(5, $commands);
-    }
-
-    /**
-     * Test that getCommands returns instances of BaseCommand.
-     */
-    public function testGetCommandsReturnsBaseCommandInstances(): void
-    {
-        $provider = new CommandProvider();
-        $commands = $provider->getCommands();
-
-        foreach ($commands as $command) {
-            $this->assertInstanceOf(\Composer\Command\BaseCommand::class, $command);
+        foreach ((new CommandProvider())->getCommands() as $command) {
+            $this->assertInstanceOf(BaseCommand::class, $command);
         }
     }
 
-    /**
-     * Test that the Command command is registered.
-     */
-    public function testContainsCommandInstance(): void
+    public function testProvidesTheThreeSupportedCommands(): void
     {
-        $provider = new CommandProvider();
-        $commands = $provider->getCommands();
-        $this->assertInstanceOf(\MyAdmin\Plugins\Command\Command::class, $commands[0]);
+        $classes = array_map('get_class', (new CommandProvider())->getCommands());
+        $this->assertContains(Command::class, $classes);
+        $this->assertContains(UpdatePlugins::class, $classes);
+        $this->assertContains(SetPermissions::class, $classes);
     }
 
     /**
-     * Test that the Parse command is registered.
+     * Parse required an undeclared dependency and CreateUser was demo scaffolding; both were
+     * removed rather than repaired.
      */
-    public function testContainsParseInstance(): void
+    public function testRemovedCommandsAreGone(): void
     {
-        $provider = new CommandProvider();
-        $commands = $provider->getCommands();
-        $this->assertInstanceOf(\MyAdmin\Plugins\Command\Parse::class, $commands[1]);
+        $this->assertFalse(class_exists('MyAdmin\Plugins\Command\Parse'));
+        $this->assertFalse(class_exists('MyAdmin\Plugins\Command\CreateUser'));
+    }
+
+    public function testCommandNamesAreNamespacedAndUnique(): void
+    {
+        $names = [];
+        foreach ((new CommandProvider())->getCommands() as $command) {
+            $name = $command->getName();
+            $this->assertNotEmpty($name);
+            $this->assertTrue(
+                $name === 'myadmin' || strpos($name, 'myadmin:') === 0,
+                $name.' must be namespaced under myadmin'
+            );
+            $names[] = $name;
+        }
+        $this->assertSame($names, array_unique($names));
     }
 
     /**
-     * Test that the CreateUser command is registered.
+     * A command with no description renders blank in `composer list`.
      */
-    public function testContainsCreateUserInstance(): void
+    public function testEveryCommandHasADescription(): void
     {
-        $provider = new CommandProvider();
-        $commands = $provider->getCommands();
-        $this->assertInstanceOf(\MyAdmin\Plugins\Command\CreateUser::class, $commands[2]);
-    }
-
-    /**
-     * Test that the UpdatePlugins command is registered.
-     */
-    public function testContainsUpdatePluginsInstance(): void
-    {
-        $provider = new CommandProvider();
-        $commands = $provider->getCommands();
-        $this->assertInstanceOf(\MyAdmin\Plugins\Command\UpdatePlugins::class, $commands[3]);
-    }
-
-    /**
-     * Test that the SetPermissions command is registered.
-     */
-    public function testContainsSetPermissionsInstance(): void
-    {
-        $provider = new CommandProvider();
-        $commands = $provider->getCommands();
-        $this->assertInstanceOf(\MyAdmin\Plugins\Command\SetPermissions::class, $commands[4]);
-    }
-
-    /**
-     * Test that getCommands method is public.
-     */
-    public function testGetCommandsIsPublic(): void
-    {
-        $ref = new ReflectionClass(CommandProvider::class);
-        $method = $ref->getMethod('getCommands');
-        $this->assertTrue($method->isPublic());
+        foreach ((new CommandProvider())->getCommands() as $command) {
+            $this->assertNotEmpty($command->getDescription(), $command->getName().' needs a description');
+        }
     }
 }

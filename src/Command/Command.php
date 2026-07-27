@@ -9,116 +9,104 @@
 
 namespace MyAdmin\Plugins\Command;
 
+use Composer\Command\BaseCommand;
+use MyAdmin\Plugins\PluginScanner;
+use MyAdmin\Plugins\VendorGuard;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
-use Composer\Command\BaseCommand;
 
 /**
- * Class Command
+ * `composer myadmin`
  *
- * @package MyAdmin\Plugins\Command
+ * Status overview of the MyAdmin installation as Composer sees it: how many plugin packages
+ * are installed, whether the dispatch tables are in sync with them, and whether any
+ * source-installed vendor package has uncommitted work.
+ *
+ * Read-only. Nothing here writes to disk.
+ *
+ * Previously this printed Symfony console demo boilerplate — "User Creator", `<info>foo</info>`,
+ * and a string-truncation sample — under a description reading "Creates a new user."
  */
 class Command extends BaseCommand
 {
+    /**
+     * Declares the command name and description.
+     *
+     * @return void
+     */
     protected function configure()
     {
         $this
-            // the name of the command (the part after "bin/console")
             ->setName('myadmin')
-            // the short description shown while running "php bin/console list"
-            ->setDescription('Creates a new user.')
-            // the full command description shown when running the command with the "--help" option
-            ->setHelp('This command allows you to create a user...');
-        //->addArgument('username', InputArgument::REQUIRED, 'The username of the user.');
+            ->setDescription('Shows MyAdmin plugin and vendor status')
+            ->setHelp(
+                'Reports installed MyAdmin plugin packages, whether include/config/hooks.json and'
+                .' plugins.json match what is on disk, and whether any source-installed vendor'
+                .' package has uncommitted changes.'
+                .PHP_EOL.PHP_EOL
+                .'Read-only. Use myadmin:update-plugins to actually rebuild the dispatch tables.'
+            );
     }
 
-    /** (optional)
-     * This method is executed before the interact() and the execute() methods.
-     * Its main purpose is to initialize variables used in the rest of the command methods.
+    /**
+     * Prints the status report.
+     *
+     * INPUT:   $input  — no arguments or options.
+     *          $output — unused; output goes through Composer's IO channel.
+     * RETURNS: int — 0 always when Composer is available, 1 when it is not. Drift is
+     *          reported, not treated as failure, so this is safe in a pipeline.
      *
      * @param \Symfony\Component\Console\Input\InputInterface   $input
      * @param \Symfony\Component\Console\Output\OutputInterface $output
-     */
-    protected function initialize(InputInterface $input, OutputInterface $output): void
-    {
-    }
-
-    /** (optional)
-     * This method is executed after initialize() and before execute().
-     * Its purpose is to check if some of the options/arguments are missing and interactively
-     * ask the user for those values. This is the last place where you can ask for missing
-     * options/arguments. After this command, missing options/arguments will result in an error.
-     *
-     * @param \Symfony\Component\Console\Input\InputInterface   $input
-     * @param \Symfony\Component\Console\Output\OutputInterface $output
-     */
-    protected function interact(InputInterface $input, OutputInterface $output): void
-    {
-    }
-
-    /** (required)
-     * This method is executed after interact() and initialize().
-     * It contains the logic you want the command to execute.
-     *
-     * @param InputInterface $input
-     * @param OutputInterface $output
+     * @return int
      */
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $output->writeln([ // outputs multiple lines to the console (adding "\n" at the end of each line)
-            'User Creator',
-            '============',
-            ''
-                         ]);
-        /*
-        $output->writeln('Username: '.$input->getArgument('username')); // retrieve the argument value using getArgument()
-        */
-        $output->write('You are about to '); // outputs a message without adding a "\n" at the end of the line
-        $output->write('create a user.');
+        $composer = $this->tryComposer();
+        $io = $this->getIO();
+        if ($composer === null) {
+            $io->writeError('<error>No composer.json found; run this from a project directory.</error>');
+            return 1;
+        }
+        $root = dirname(rtrim((string)$composer->getConfig()->get('vendor-dir'), '/'));
+        $io->write('<info>MyAdmin status</info>');
+        $io->write('  root: '.$root);
 
-        /** Coloring
-         * @link http://symfony.com/doc/current/console/coloring.html
-         */
-        $output->writeln('<info>foo</info>'); // green text
-        $output->writeln('<comment>foo</comment>'); // yellow text
-        $output->writeln('<question>foo</question>'); // black text on a cyan background
-        $output->writeln('<error>foo</error>'); // white text on a red background
+        if (is_dir($root.'/include/config')) {
+            $result = PluginScanner::forProjectRoot($root)->rebuild(true);
+            $io->write(sprintf(
+                '  plugins: %d on disk, %d evaluated, %d retained',
+                $result['present'],
+                $result['scanned'],
+                $result['retained']
+            ));
+            foreach (['hooks', 'plugins'] as $file) {
+                $r = $result[$file];
+                $drift = count($r['added']) + count($r['removed']);
+                $io->write(sprintf(
+                    '  %-12s %s',
+                    $file.'.json:',
+                    $drift === 0
+                        ? '<info>in sync</info>'
+                        : sprintf('<comment>%d entr%s out of sync (+%d / -%d)</comment>', $drift, $drift === 1 ? 'y' : 'ies', count($r['added']), count($r['removed']))
+                ));
+            }
+            if ($result['skipped'] !== []) {
+                $io->write(sprintf('  <comment>%d package(s) not evaluable outside a MyAdmin request</comment>', count($result['skipped'])));
+            }
+        } else {
+            $io->write('  <comment>include/config not found; not a MyAdmin checkout</comment>');
+        }
 
-        /** Formatting
-         * @link http://symfony.com/doc/current/components/console/helpers/formatterhelper.html
-         */
-        $formatter = $this->getHelper('formatter');
-        // Section - [SomeSection] Here is some message related to that section
-        $formattedLine = $formatter->formatSection('SomeSection', 'Here is some message related to that section');
-        $output->writeln($formattedLine);
-        // Error Block
-        $errorMessages = ['Error!', 'Something went wrong'];
-        $formattedBlock = $formatter->formatBlock($errorMessages, 'error');
-        $output->writeln($formattedBlock);
-        // Truncated Messages
-        $message = 'This is a very long message, which should be truncated';
-        $truncatedMessage = $formatter->truncate($message, 7); // This is...
-        $truncatedMessage = $formatter->truncate($message, 7, '!!'); // result: This is!!
-        $output->writeln($truncatedMessage);
-
-        /** Table
-         * @link http://symfony.com/doc/current/components/console/helpers/table.html
-         */
-
-        /** Style
-         * @link http://symfony.com/doc/current/console/style.html
-         */
-
-        /** Process Helper
-         * @link http://symfony.com/doc/current/components/console/helpers/processhelper.html
-         */
-        /** Progress Bar
-         * @link http://symfony.com/doc/current/components/console/helpers/progressbar.html
-         */
-        /** Question Helper
-         * @link http://symfony.com/doc/current/components/console/helpers/questionhelper.html
-         */
-
+        $dirty = (new VendorGuard($root.'/vendor'))->findDirty();
+        if ($dirty === []) {
+            $io->write('  vendor:      <info>all working copies clean</info>');
+        } else {
+            $io->write(sprintf('  vendor:      <comment>%d package(s) with uncommitted changes</comment>', count($dirty)));
+            foreach (VendorGuard::formatReport($dirty) as $line) {
+                $io->write($line);
+            }
+        }
         return 0;
     }
 }

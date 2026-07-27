@@ -38,129 +38,34 @@ Decide where the new type should be installed:
 
 **Option A — Standard vendor path (like modules/plugins/menus):** No changes needed to `getInstallPath()`. Packages install to `vendor/{package-name}`.
 
-**Option B — Custom directory (like templates → `include/templates/`):**
+**Option B — Custom directory:**
 
-1. Add a protected property for the directory:
-   ```php
-   protected $newTypeDir;
-   ```
-
-2. Initialize it in the constructor, following the `templateDir` pattern:
-   ```php
-   $this->newTypeDir = $this->vendorDir.'/../path/to/new_type';
-   ```
-
-3. Add an `initializeNewTypeDir()` method:
-   ```php
-   protected function initializeNewTypeDir()
-   {
-       $this->filesystem->ensureDirectoryExists($this->newTypeDir);
-       $this->newTypeDir = realpath($this->newTypeDir);
-   }
-   ```
-
-4. Add a branch in `getInstallPath()` (line ~156), following the existing `myadmin-template` pattern:
-   ```php
-   public function getInstallPath(PackageInterface $package)
-   {
-       if ($this->type == 'myadmin-template') {
-           $this->initializeTemplateDir();
-           $basePath = ($this->templateDir ? $this->templateDir.'/' : '') . $package->getPrettyName();
-       } elseif ($this->type == 'myadmin-NEW_TYPE') {
-           $this->initializeNewTypeDir();
-           $basePath = ($this->newTypeDir ? $this->newTypeDir.'/' : '') . $package->getPrettyName();
-       } else {
-           $this->initializeVendorDir();
-           $basePath = ($this->vendorDir ? $this->vendorDir.'/' : '') . $package->getPrettyName();
-       }
-       $targetDir = $package->getTargetDir();
-       return $basePath . ($targetDir ? '/'.$targetDir : '');
-   }
-   ```
-
-**Verify:** Read the updated `getInstallPath()` and confirm the logic branches are correct. Run `vendor/bin/phpunit tests/InstallerTest.php`.
-
-### Step 3: (Optional) Add a standalone installer class if the type needs special validation
-
-Only do this if the new type requires package-name prefix validation (like `TemplateInstaller` validates `myadmin/template-` prefix). Follow the `src/TemplateInstaller.php` pattern exactly:
+Branch on the **package's** type, never on `$this->type`:
 
 ```php
-<?php
-namespace MyAdmin\Plugins;
-
-use Composer\Package\PackageInterface;
-use Composer\Installer\LibraryInstaller;
-
-class NewTypeInstaller extends LibraryInstaller
+public function getInstallPath(PackageInterface $package)
 {
-    public function getInstallPath(PackageInterface $package)
-    {
-        $prefix = mb_substr($package->getPrettyName(), 0, LENGTH);
-        if ('myadmin/newtype-' !== $prefix) {
-            throw new \InvalidArgumentException(
-                'Unable to install new type, packages '
-                .'should always start their package name with '
-                .'"myadmin/newtype-"'
-            );
-        }
-        return 'path/to/install/'.mb_substr($package->getPrettyName(), LENGTH);
+    if ($package->getType() === 'myadmin-NEW_TYPE') {
+        $path = 'path/to/new_type/'.$package->getPrettyName();
+        $this->filesystem->ensureDirectoryExists(dirname($path));
+        return $path;
     }
-
-    public function supports($packageType)
-    {
-        return 'myadmin-NEW_TYPE' === $packageType;
-    }
+    return parent::getInstallPath($package);
 }
 ```
 
-If you create a standalone installer, register it in `src/InstallerPlugin.php` by adding it in `activate()`:
+⚠️ **`$this->type` is the installer's own constructor label, not the package's type.** It defaults to `'library'` and nothing ever passes anything else, so `if ($this->type == 'myadmin-template')` was dead code that could not fire in any configuration. That branch — and the `$templateDir` property and `initializeTemplateDir()` method it used — were deleted for exactly this reason. Do not resurrect the pattern.
+
+**Also override `getPackageBasePath()`.** `install()` and `update()` use `getInstallPath()`, but `uninstall()` uses `getPackageBasePath()`. Override only the former and a package installs to your custom path but uninstalls from `vendor/`, silently leaving files behind:
+
 ```php
-public function activate(Composer $composer, IOInterface $io)
+protected function getPackageBasePath(PackageInterface $package)
 {
-    $installer = new Installer($io, $composer);
-    $composer->getInstallationManager()->addInstaller($installer);
-    // Add standalone installer for new type if needed:
-    $newTypeInstaller = new NewTypeInstaller($io, $composer);
-    $composer->getInstallationManager()->addInstaller($newTypeInstaller);
+    return $this->getInstallPath($package);
 }
 ```
 
-**Verify:** The new class file exists in `src/` and follows PSR-4 (`MyAdmin\Plugins\` namespace).
-
-### Step 4: Add tests for the new type
-
-Add a test to `tests/InstallerTest.php` following the existing pattern:
-
-```php
-/**
- * Test supports returns true for myadmin-NEW_TYPE type.
- */
-public function testSupportsMyadminNewType(): void
-{
-    $installer = $this->createInstallerStub();
-    $this->assertTrue($installer->supports('myadmin-NEW_TYPE'));
-}
-```
-
-Also update `testAllSupportedTypes()` to include the new type in the `$expected` array:
-```php
-$expected = ['myadmin-template', 'myadmin-module', 'myadmin-plugin', 'myadmin-menu', 'myadmin-NEW_TYPE'];
-```
-
-If you created a standalone installer (Step 3), create a test file `tests/NewTypeInstallerTest.php` following `tests/TemplateInstallerTest.php` exactly:
-- Test `supports()` returns true for the new type and false for others
-- Test `getInstallPath()` returns the correct path for valid packages
-- Test `getInstallPath()` throws `\InvalidArgumentException` for invalid prefixes
-- Use `ReflectionClass::newInstanceWithoutConstructor()` for stubs
-- Use anonymous class implementing `PackageInterface` for package stubs (copy from `TemplateInstallerTest.php`)
-
-**Verify:** Run `vendor/bin/phpunit` — all tests must pass, including the new ones.
-
-### Step 5: Update CLAUDE.md documentation
-
-Add the new type to the "Package Types" table in `CLAUDE.md` with its install path.
-
-**Verify:** The table has the correct type name and path.
+**Before adding a custom directory at all, ask whether it is needed.** MyAdmin packages read their own templates and scripts in place via `__DIR__` and ship no web assets, so there is usually nothing to relocate. Composer's default `LibraryInstaller` accepts every package type and routes to `vendor/`, which is why all four MyAdmin types work today with no custom routing.
 
 ## Examples
 
@@ -183,12 +88,10 @@ User says: "Add myadmin-theme type that installs to include/themes/"
 
 Actions:
 1. Edit `src/Installer.php`:
-   - Add `protected $themeDir;` property
-   - Add `$this->themeDir = $this->vendorDir.'/../include/themes';` in constructor
-   - Add `'myadmin-theme'` to `supports()` array
-   - Add `elseif ($this->type == 'myadmin-theme')` branch in `getInstallPath()`
-   - Add `initializeThemeDir()` protected method
-2. Add tests in `tests/InstallerTest.php`
+   - Add `'myadmin-theme'` to the `MYADMIN_PACKAGE_TYPES` constant
+   - If it needs a non-`vendor/` location, add an `if ($package->getType() === 'myadmin-theme')` branch to `getInstallPath()` — branch on the **package's** type, never `$this->type`
+   - Override `getPackageBasePath()` to match, or uninstall will look in the wrong place
+2. Add tests in `tests/InstallerTest.php` — assert the resolved path, not just that the method exists
 3. Run `vendor/bin/phpunit` — all pass
 
 ## Common Issues
@@ -199,7 +102,7 @@ The type string is case-sensitive. Ensure the string in `supports()` exactly mat
 
 ### `testAllSupportedTypes` fails after adding new type
 
-You added the type to `supports()` but forgot to update the `$expected` array in `testAllSupportedTypes()` at `tests/InstallerTest.php` line ~239. Add the new type string to that array.
+You added the type to `supports()` but forgot to update the `$expected` array in `testAllSupportedTypes()` at `tests/InstallerTest.php` (`testSupportsClaimsOnlyMyAdminTypes`). Add the new type string to that array.
 
 ### Standalone installer class not found
 
@@ -207,7 +110,9 @@ Ensure the file is in `src/` and the class namespace is `MyAdmin\Plugins\`. PSR-
 
 ### `getInstallPath()` returns wrong directory
 
-The `$this->type` check in `getInstallPath()` compares against the installer's own type (set in constructor), NOT the package type. If you're relying on `getInstallPath()` to route by package type, you need to check `$package->getType()` instead of `$this->type`. Look at how the existing template branch works — it checks `$this->type == 'myadmin-template'`.
+`$this->type` is the installer's own constructor label — always `'library'`, because nothing passes anything else. Routing on it can never work. Use `$package->getType()`.
+
+This is not hypothetical: the original `myadmin-template` branch made exactly this mistake and was unreachable for its entire lifetime. It has been deleted; there is no "existing template branch" to copy.
 
 ### Tests fail with "Cannot instantiate abstract class" or constructor errors
 

@@ -19,7 +19,7 @@ Create new Composer CLI commands for the MyAdmin plugin installer, following the
 1. **Choose the command name and class name.**
    - Command name: `myadmin:<kebab-case-verb-noun>` (e.g., `myadmin:clear-cache`)
    - Class name: PascalCase matching the command (e.g., `ClearCache`)
-   - Verify the name doesn't conflict with existing commands: `Command`, `Parse`, `CreateUser`, `UpdatePlugins`, `SetPermissions`.
+   - Verify the name doesn't conflict with existing commands: `Command` (`myadmin`), `UpdatePlugins` (`myadmin:update-plugins`), `SetPermissions` (`myadmin:set-permissions`).
 
 2. **Create the command class at `src/Command/<ClassName>.php`.**
    Use this exact template:
@@ -128,7 +128,7 @@ Create new Composer CLI commands for the MyAdmin plugin installer, following the
    }
    ```
 
-   - If the command has arguments, add tests for each argument (see `CreateUserTest.php` for the pattern: `testCommandHas<Arg>Argument`, `test<Arg>ArgumentIsRequired`, `test<Arg>ArgumentHasDescription`).
+   - If the command has arguments, add tests for each argument assert them through `$command->getDefinition()->hasArgument()` / `hasOption()` rather than by reflecting on `configure()`.
    - Verify the test file exists before proceeding.
 
 5. **Update `tests/CommandProviderTest.php`.**

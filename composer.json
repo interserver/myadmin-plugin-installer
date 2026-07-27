@@ -30,6 +30,11 @@
 			"Tests\\MyAdmin\\Plugins\\": "tests/"
 		}
 	},
+	"scripts": {
+		"test": "phpunit",
+		"test:coverage": "phpunit --coverage-text",
+		"lint": "find src tests -name '*.php' -print0 | xargs -0 -n1 php -l"
+	},
 	"extra": {
 		"plugin-modifies-install-path": false,
 		"plugin-modifies-downloads": false,

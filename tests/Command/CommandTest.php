@@ -2,92 +2,76 @@
 
 namespace Tests\MyAdmin\Plugins\Command;
 
+use Composer\Command\BaseCommand;
 use MyAdmin\Plugins\Command\Command;
 use PHPUnit\Framework\TestCase;
-use ReflectionClass;
+use Tests\MyAdmin\Plugins\Support\SourceInspection;
 
 /**
- * Test suite for the Command class.
- *
- * Tests class structure and command configuration.
+ * Test suite for the base `myadmin` status command.
  *
  * @covers \MyAdmin\Plugins\Command\Command
  */
 class CommandTest extends TestCase
 {
-    /**
-     * Test that Command extends BaseCommand.
-     */
-    public function testExtendsBaseCommand(): void
+    use SourceInspection;
+
+    /** @var Command */
+    private $command;
+
+    protected function setUp(): void
     {
-        $ref = new ReflectionClass(Command::class);
-        $this->assertSame('Composer\Command\BaseCommand', $ref->getParentClass()->getName());
+        $this->command = new Command();
+    }
+
+    public function testIsAComposerCommand(): void
+    {
+        $this->assertInstanceOf(BaseCommand::class, $this->command);
+    }
+
+    public function testIsNamedAndDescribed(): void
+    {
+        $this->assertSame('myadmin', $this->command->getName());
+        $this->assertNotEmpty($this->command->getDescription());
+        $this->assertNotEmpty($this->command->getHelp());
     }
 
     /**
-     * Test that the command name is 'myadmin'.
+     * The description used to read "Creates a new user." on a command that created nothing.
      */
-    public function testCommandNameIsMyadmin(): void
+    public function testDescriptionMatchesWhatTheCommandActuallyDoes(): void
     {
-        $command = new Command();
-        $this->assertSame('myadmin', $command->getName());
+        $this->assertStringNotContainsString('user', strtolower($this->command->getDescription()));
+        $this->assertStringContainsString('status', strtolower($this->command->getDescription()));
+    }
+
+    public function testTakesNoArgumentsOrOptions(): void
+    {
+        $this->assertSame([], $this->command->getDefinition()->getArguments());
+        $this->assertSame([], $this->command->getDefinition()->getOptions());
     }
 
     /**
-     * Test that the command has a description set.
+     * The previous body printed Symfony console demo output — "User Creator",
+     * `<info>foo</info>`, a formatter section and a string-truncation sample.
      */
-    public function testCommandHasDescription(): void
+    public function testNoLongerContainsDemoScaffolding(): void
     {
-        $command = new Command();
-        $this->assertNotEmpty($command->getDescription());
+        $source = $this->codeOf(Command::class);
+        $this->assertStringNotContainsString('User Creator', $source);
+        $this->assertStringNotContainsString('<info>foo</info>', $source);
+        $this->assertStringNotContainsString('truncate', $source);
     }
 
     /**
-     * Test that the command has help text set.
+     * This command reports; it must not mutate anything.
      */
-    public function testCommandHasHelp(): void
+    public function testIsReadOnly(): void
     {
-        $command = new Command();
-        $this->assertNotEmpty($command->getHelp());
-    }
-
-    /**
-     * Test that configure method exists and is protected.
-     */
-    public function testConfigureIsProtected(): void
-    {
-        $ref = new ReflectionClass(Command::class);
-        $method = $ref->getMethod('configure');
-        $this->assertTrue($method->isProtected());
-    }
-
-    /**
-     * Test that execute method exists and is protected.
-     */
-    public function testExecuteIsProtected(): void
-    {
-        $ref = new ReflectionClass(Command::class);
-        $method = $ref->getMethod('execute');
-        $this->assertTrue($method->isProtected());
-    }
-
-    /**
-     * Test that initialize method exists and is protected.
-     */
-    public function testInitializeIsProtected(): void
-    {
-        $ref = new ReflectionClass(Command::class);
-        $method = $ref->getMethod('initialize');
-        $this->assertTrue($method->isProtected());
-    }
-
-    /**
-     * Test that interact method exists and is protected.
-     */
-    public function testInteractIsProtected(): void
-    {
-        $ref = new ReflectionClass(Command::class);
-        $method = $ref->getMethod('interact');
-        $this->assertTrue($method->isProtected());
+        $source = $this->codeOf(Command::class);
+        $this->assertStringContainsString('rebuild(true)', $source, 'must use the dry-run form');
+        foreach (['file_put_contents', 'unlink(', 'writeJson', 'mkdir('] as $mutator) {
+            $this->assertStringNotContainsString($mutator, $source, $mutator.' would make this command non-read-only');
+        }
     }
 }

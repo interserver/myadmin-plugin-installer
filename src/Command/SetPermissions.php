@@ -9,61 +9,79 @@
 
 namespace MyAdmin\Plugins\Command;
 
-use Symfony\Component\Console\Input\InputInterface;
-use Symfony\Component\Console\Output\OutputInterface;
 use Composer\Command\BaseCommand;
+use Composer\Script\Event;
+use MyAdmin\Plugins\Plugin;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
+use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * Class SetPermissions
+ * `composer myadmin:set-permissions`
  *
- * @package MyAdmin\Plugins\Command
+ * Creates and permissions every path listed in the root package's `extra.writable-dirs` and
+ * `extra.writable-files`.
+ *
+ * The same work runs automatically on post-install-cmd/post-update-cmd through MyAdmin's
+ * `scripts` block. This command exists so it can be re-run on demand without a full install.
+ *
+ * PREVIOUSLY BROKEN: execute() called Plugin::setPermissions() with no arguments against a
+ * signature requiring a Composer\Script\Event, so it was a guaranteed ArgumentCountError.
+ * It went unnoticed because the whole command surface is unreachable while the package is
+ * blocked by config.allow-plugins. Fixed by constructing the Event the API expects.
  */
 class SetPermissions extends BaseCommand
 {
+    /**
+     * Declares the command name, description and options.
+     *
+     * @return void
+     */
     protected function configure()
     {
         $this
-            ->setName('myadmin:set-permissions') // the name of the command (the part after "bin/console")
-            ->setDescription('Creates and Sets Writable Permissions on Required Dirs') // the short description shown while running "php bin/console list"
-            ->setHelp('Creates and Sets Writable Permissions on Required Directories specified in the writable-dirs composer extra options section.'); // the full command description shown when running the command with the "--help" option
+            ->setName('myadmin:set-permissions')
+            ->setDescription('Creates and Sets Writable Permissions on Required Dirs')
+            ->setHelp(
+                'Creates and sets writable permissions on the directories and files listed in the'
+                .' writable-dirs and writable-files entries of the root composer.json "extra" section.'
+                .PHP_EOL.PHP_EOL
+                .'Runs automatically on composer install/update; use this to re-run it on its own.'
+            )
+            ->addOption('dry-run', null, InputOption::VALUE_NONE, 'List the paths that would be changed without changing them');
     }
 
-    /** (optional)
-     * This method is executed before the interact() and the execute() methods.
-     * Its main purpose is to initialize variables used in the rest of the command methods.
+    /**
+     * Runs the permission pass.
+     *
+     * INPUT:   $input  — supports --dry-run.
+     *          $output — unused; progress goes through Composer's IO channel so it honours
+     *                    -q/-v/--no-ansi.
+     * RETURNS: int — 0 on success, 1 when Composer is unavailable.
      *
      * @param \Symfony\Component\Console\Input\InputInterface   $input
      * @param \Symfony\Component\Console\Output\OutputInterface $output
-     */
-    protected function initialize(InputInterface $input, OutputInterface $output): void
-    {
-    }
-
-    /** (optional)
-     * This method is executed after initialize() and before execute().
-     * Its purpose is to check if some of the options/arguments are missing and interactively
-     * ask the user for those values. This is the last place where you can ask for missing
-     * options/arguments. After this command, missing options/arguments will result in an error.
-     *
-     * @param \Symfony\Component\Console\Input\InputInterface   $input
-     * @param \Symfony\Component\Console\Output\OutputInterface $output
-     */
-    protected function interact(InputInterface $input, OutputInterface $output): void
-    {
-    }
-
-
-    /** (required)
-     * This method is executed after interact() and initialize().
-     * It contains the logic you want the command to execute.
-     *
-     * @param InputInterface $input
-     * @param OutputInterface $output
+     * @return int
      */
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        \MyAdmin\Plugins\Plugin::setPermissions();
-
+        $composer = $this->tryComposer();
+        $io = $this->getIO();
+        if ($composer === null) {
+            $io->writeError('<error>No composer.json found; run this from a project directory.</error>');
+            return 1;
+        }
+        $event = new Event('myadmin:set-permissions', $composer, $io);
+        if ($input->getOption('dry-run')) {
+            foreach (Plugin::getWritableDirs($event) as $path) {
+                $io->write(sprintf('dir  <info>%s</info>%s', $path, is_dir($path) ? '' : ' (would be created)'));
+            }
+            foreach (Plugin::getWritableFiles($event) as $path) {
+                $io->write(sprintf('file <info>%s</info>%s', $path, file_exists($path) ? '' : ' (would be created)'));
+            }
+            return 0;
+        }
+        Plugin::setPermissions($event);
         return 0;
     }
 }
