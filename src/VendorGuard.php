@@ -66,7 +66,69 @@ class VendorGuard
      */
     public function __construct($vendorDir)
     {
-        $this->vendorDir = rtrim($vendorDir, '/');
+        $this->vendorDir = rtrim(self::normalizeSeparators($vendorDir), '/');
+    }
+
+    /**
+     * Rewrites backslashes to forward slashes.
+     *
+     * Composer package names are canonically "vendor/name" with a forward slash on every
+     * platform, and git accepts forward slashes in paths on Windows too. Normalising once
+     * on the way in means the rest of this class never has to care which separator the
+     * caller or `glob()` happened to produce.
+     *
+     * @param string $path
+     * @return string
+     */
+    public static function normalizeSeparators($path)
+    {
+        return str_replace('\\', '/', $path);
+    }
+
+    /**
+     * Derives the composer package name from one `glob()` hit.
+     *
+     * INPUT:   $vendorDir — the vendor root; $gitDir — a matched ".../vendor/acme/one/.git".
+     * RETURNS: string — "acme/one".
+     *
+     * Split out of {@see findWorkingCopies()} and made static so the separator handling is
+     * reachable from a test on a machine whose `glob()` never emits backslashes. PHP's glob
+     * echoes back the separators of the pattern it was given, and on Windows the vendor root
+     * typically arrives from `sys_get_temp_dir()` or Composer with backslashes, so both sides
+     * are normalised before the prefix is stripped.
+     *
+     * @param string $vendorDir
+     * @param string $gitDir
+     * @return string
+     */
+    public static function packageNameFor($vendorDir, $gitDir)
+    {
+        $vendorDir = rtrim(self::normalizeSeparators($vendorDir), '/');
+        return str_replace($vendorDir.'/', '', dirname(self::normalizeSeparators($gitDir)));
+    }
+
+    /**
+     * The shell token that discards a stream.
+     *
+     * `/dev/null` is a Unix path. cmd.exe does not resolve it, and the redirection failing
+     * aborts the whole command line *before* git runs — so on Windows every git invocation
+     * here used to die with "The system cannot find the path specified." and a non-zero
+     * status, which {@see statusLines()} then read as "clean". The guard that exists to stop
+     * Composer silently stashing work was itself silently inert on Windows.
+     *
+     * INPUT:   $isWindows — forced platform, or null to detect. The parameter exists so both
+     *          branches are reachable from a test on either platform; production always
+     *          passes null.
+     *
+     * @param bool|null $isWindows
+     * @return string
+     */
+    public static function nullDevice($isWindows = null)
+    {
+        if ($isWindows === null) {
+            $isWindows = DIRECTORY_SEPARATOR === '\\';
+        }
+        return $isWindows ? 'NUL' : '/dev/null';
     }
 
     /**
@@ -97,8 +159,12 @@ class VendorGuard
     public function findWorkingCopies()
     {
         $found = [];
-        foreach (glob($this->vendorDir.'/*/*/.git', GLOB_ONLYDIR) as $gitDir) {
-            $found[] = str_replace($this->vendorDir.'/', '', dirname($gitDir));
+        $matches = glob($this->vendorDir.'/*/*/.git', GLOB_ONLYDIR);
+        if ($matches === false) {
+            return [];
+        }
+        foreach ($matches as $gitDir) {
+            $found[] = self::packageNameFor($this->vendorDir, $gitDir);
         }
         sort($found);
         return $found;
@@ -146,7 +212,7 @@ class VendorGuard
         }
         $output = [];
         $return = 0;
-        exec('git -C '.escapeshellarg($dir).' status --porcelain 2>/dev/null', $output, $return);
+        exec('git -C '.escapeshellarg($dir).' status --porcelain 2>'.self::nullDevice(), $output, $return);
         if ($return !== 0) {
             return [];
         }

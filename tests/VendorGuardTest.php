@@ -53,6 +53,11 @@ class VendorGuardTest extends TestCase
 
     /**
      * Creates a git working copy with one committed file.
+     *
+     * The redirect target must come from {@see VendorGuard::nullDevice()} rather than being
+     * hardcoded to `/dev/null`: cmd.exe cannot resolve that path and fails the redirection
+     * before git runs, so on Windows every repository here silently failed to be created and
+     * five tests failed against an empty vendor directory.
      */
     private function makeRepo(string $package): string
     {
@@ -60,11 +65,12 @@ class VendorGuardTest extends TestCase
         mkdir($dir, 0777, true);
         file_put_contents($dir.'/README.md', "initial\n");
         $q = escapeshellarg($dir);
-        exec("git -C {$q} init -q 2>/dev/null");
-        exec("git -C {$q} config user.email test@example.com 2>/dev/null");
-        exec("git -C {$q} config user.name Test 2>/dev/null");
-        exec("git -C {$q} add -A 2>/dev/null");
-        exec("git -C {$q} commit -q -m initial 2>/dev/null");
+        $null = VendorGuard::nullDevice();
+        exec("git -C {$q} init -q 2>{$null}");
+        exec("git -C {$q} config user.email test@example.com 2>{$null}");
+        exec("git -C {$q} config user.name Test 2>{$null}");
+        exec("git -C {$q} add -A 2>{$null}");
+        exec("git -C {$q} commit -q -m initial 2>{$null}");
         return $dir;
     }
 
@@ -201,5 +207,106 @@ class VendorGuardTest extends TestCase
     public function testFormatReportOfNothingIsEmpty(): void
     {
         $this->assertSame([], VendorGuard::formatReport([]));
+    }
+
+    // -----------------------------------------------------------------------------
+    // Cross-platform plumbing
+    //
+    // These cover the two platform decisions this class makes. Both take an explicit
+    // override rather than reading DIRECTORY_SEPARATOR only, because the bug they guard
+    // against is Windows-only and CI runs Windows on a single leg — an assertion that can
+    // only run on the platform where it is already too late is not much of a guard.
+    // -----------------------------------------------------------------------------
+
+    /**
+     * The fixture itself is the thing that broke on Windows, so assert it works before
+     * trusting any test that depends on it. Without this, a broken fixture shows up as
+     * misleading VendorGuard failures rather than as "git did not run".
+     */
+    public function testTheRepositoryFixtureActuallyProducesAGitWorkingCopy(): void
+    {
+        $dir = $this->makeRepo('acme/one');
+
+        $this->assertDirectoryExists($dir.'/.git', 'git init did not create a repository');
+        $this->assertSame(['acme/one'], $this->guard()->findWorkingCopies());
+    }
+
+    public function testNullDeviceIsTheUnixPathOnUnix(): void
+    {
+        $this->assertSame('/dev/null', VendorGuard::nullDevice(false));
+    }
+
+    public function testNullDeviceIsNulOnWindows(): void
+    {
+        $this->assertSame('NUL', VendorGuard::nullDevice(true));
+    }
+
+    public function testNullDeviceDetectsThePlatformWhenNotForced(): void
+    {
+        $expected = DIRECTORY_SEPARATOR === '\\' ? 'NUL' : '/dev/null';
+        $this->assertSame($expected, VendorGuard::nullDevice());
+    }
+
+    public function testNormalizeSeparatorsRewritesBackslashes(): void
+    {
+        $this->assertSame(
+            'C:/proj/vendor/acme/one',
+            VendorGuard::normalizeSeparators('C:\\proj\\vendor\\acme\\one')
+        );
+    }
+
+    public function testNormalizeSeparatorsLeavesForwardSlashesAlone(): void
+    {
+        $this->assertSame('/srv/app/vendor', VendorGuard::normalizeSeparators('/srv/app/vendor'));
+    }
+
+    public function testPackageNameIsDerivedFromAUnixGlobHit(): void
+    {
+        $this->assertSame(
+            'acme/one',
+            VendorGuard::packageNameFor('/srv/app/vendor', '/srv/app/vendor/acme/one/.git')
+        );
+    }
+
+    /**
+     * The Windows shape: `glob()` echoes back the separators of its pattern, and the vendor
+     * root reaches this class with backslashes. Exercised here because the one CI leg that
+     * runs Windows cannot be the only place this is checked.
+     */
+    public function testPackageNameIsDerivedFromAWindowsGlobHit(): void
+    {
+        $this->assertSame(
+            'acme/one',
+            VendorGuard::packageNameFor('C:\\proj\\vendor', 'C:\\proj\\vendor\\acme\\one\\.git')
+        );
+    }
+
+    public function testPackageNameHandlesMixedSeparators(): void
+    {
+        $this->assertSame(
+            'acme/one',
+            VendorGuard::packageNameFor('C:\\proj\\vendor', 'C:/proj/vendor\\acme/one\\.git')
+        );
+    }
+
+    /**
+     * A vendor path handed in with Windows separators must still yield composer-style
+     * "vendor/name" keys, since that is what callers match against.
+     */
+    public function testPackageNamesUseForwardSlashesRegardlessOfTheVendorPathStyle(): void
+    {
+        $this->makeRepo('acme/one');
+
+        $windowsStyle = new VendorGuard(str_replace('/', '\\', $this->vendor));
+
+        $this->assertSame(['acme/one'], $windowsStyle->findWorkingCopies());
+    }
+
+    public function testATrailingSeparatorOnTheVendorPathIsIgnored(): void
+    {
+        $this->makeRepo('acme/one');
+
+        $this->assertSame(['acme/one'], (new VendorGuard($this->vendor.'/'))->findWorkingCopies());
+        $this->assertSame(['acme/one'], (new VendorGuard($this->vendor.'\\'))->findWorkingCopies());
     }
 }
