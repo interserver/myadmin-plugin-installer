@@ -32,9 +32,14 @@ class Command extends BaseCommand
     /**
      * Declares the command name and description.
      *
+     * The `: void` is load-bearing. symfony/console 8.0 added a native return type to
+     * `Command::configure()`; an untyped override is a fatal signature mismatch there.
+     * Declaring it here is compatible in both directions — a child may add a return type
+     * the parent lacks — so this works against 7.x (untyped parent) and 8.x alike.
+     *
      * @return void
      */
-    protected function configure()
+    protected function configure(): void
     {
         $this
             ->setName('myadmin')
