@@ -164,7 +164,28 @@ class Bootstrap
             return false;
         }
         class_alias(FakeApp::class, 'MyAdmin\App');
+        self::installTestContainerBuilder();
         self::$appInstalled = true;
+        return true;
+    }
+
+    /**
+     * Aliases the harness {@see TestContainerBuilder} into core's name.
+     *
+     * Repos already call `\MyAdmin\App\Testing\TestContainerBuilder::make()`
+     * unguarded — `myadmin-virtuozzo-vps` does, and `myadmin-vps-module` guards
+     * it with a `class_exists()` that has always been false. That class lives
+     * in the core tree and in no package, so those call sites have never once
+     * executed. Providing the name here is what turns them on.
+     *
+     * @return bool whether this call installed the alias
+     */
+    public static function installTestContainerBuilder()
+    {
+        if (class_exists('MyAdmin\App\Testing\TestContainerBuilder', false)) {
+            return false;
+        }
+        class_alias(TestContainerBuilder::class, 'MyAdmin\App\Testing\TestContainerBuilder');
         return true;
     }
 

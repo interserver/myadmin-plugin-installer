@@ -78,6 +78,14 @@ class FakeApp
     private static $output;
 
     /**
+     * Whatever a test bound via setContainer(). The harness never reads it —
+     * it exists so `setContainer()`/`container()` round-trip as core's do.
+     *
+     * @var object|null
+     */
+    private static $container;
+
+    /**
      * Value returned by ima(): the panel the request is rendering.
      *
      * @var string
@@ -116,7 +124,27 @@ class FakeApp
     public static function has($id)
     {
         self::log(__FUNCTION__, [$id]);
+        // Always true: the harness backs every id the fleet asks for, whether
+        // or not a test bound an explicit container. Returning the container's
+        // answer would make `get_module_db()` fall to `clone $default_dbh` for
+        // an unbound id — which the harness also seeds, so both paths work,
+        // but "true" is the simpler and more predictable contract.
         return true;
+    }
+
+    /**
+     * The `tf` a test bound through {@see \MyAdmin\Plugins\Testing\TestContainerBuilder},
+     * if any.
+     *
+     * @return object|null
+     */
+    private static function boundTf()
+    {
+        if (self::$container === null || !method_exists(self::$container, 'get')) {
+            return null;
+        }
+        $tf = self::$container->get('MyAdmin\tf');
+        return is_object($tf) ? $tf : null;
     }
 
     /**
@@ -127,6 +155,51 @@ class FakeApp
     {
         self::log(__FUNCTION__, [$id]);
         return null;
+    }
+
+    /**
+     * Core's container setter. Deliberately **not** type-hinted against
+     * `Psr\Container\ContainerInterface`: a plugin's vendor tree may not have
+     * psr/container, and a type hint against an unloadable interface fatals at
+     * call time rather than failing gracefully.
+     *
+     * @param object|null $container
+     * @return void
+     */
+    public static function setContainer($container = null)
+    {
+        self::log(__FUNCTION__, [$container]);
+        self::$container = $container;
+    }
+
+    /**
+     * Core's container getter.
+     *
+     * @return object|null
+     */
+    public static function container()
+    {
+        self::log(__FUNCTION__, []);
+        return self::$container;
+    }
+
+    /**
+     * Core drops the bound container so the next request rebuilds it. Real
+     * plugin test suites call this from `setUp()` — `myadmin-virtuozzo-vps`
+     * does, in all 52 of its tests — so the fake has to provide it or the
+     * alias is useless.
+     *
+     * The fake clears **recorded state** rather than discarding the fakes
+     * themselves, which is what a `setUp()` calling it actually wants: a clean
+     * slate that still has working doubles behind it.
+     *
+     * @return void
+     */
+    public static function resetContainer()
+    {
+        self::log(__FUNCTION__, []);
+        self::$container = null;
+        self::reset();
     }
 
     // -----------------------------------------------------------------------
@@ -273,6 +346,10 @@ class FakeApp
     public static function tf()
     {
         self::log(__FUNCTION__, []);
+        $bound = self::boundTf();
+        if ($bound !== null) {
+            return $bound;
+        }
         $tf = new \stdClass();
         $tf->db = self::db();
         $tf->history = self::history();
@@ -296,6 +373,10 @@ class FakeApp
     public static function functionRequirements($function)
     {
         self::log(__FUNCTION__, [$function]);
+        $tf = self::boundTf();
+        if ($tf !== null && method_exists($tf, 'function_requirements')) {
+            return (bool)$tf->function_requirements($function);
+        }
         return !in_array($function, self::$missingRequirements, true);
     }
 
@@ -313,6 +394,15 @@ class FakeApp
     public static function getServiceDefine($service)
     {
         self::log(__FUNCTION__, [$service]);
+        // Core implements this as `self::tf()->get_service_define($service)`,
+        // and real plugin suites exploit that: `myadmin-virtuozzo-vps` binds a
+        // tf whose get_service_define() returns a sentinel so that *no* type
+        // matches, then asserts the handler stays inert. Honouring a bound tf
+        // first is what makes those already-written tests run.
+        $tf = self::boundTf();
+        if ($tf !== null && method_exists($tf, 'get_service_define')) {
+            return $tf->get_service_define($service);
+        }
         if (array_key_exists($service, self::$serviceDefines)) {
             return self::$serviceDefines[$service];
         }
