@@ -53,7 +53,7 @@ class FakeVariables
      * @param array<string,mixed>                  $request initial request bag
      * @param \MyAdmin\Plugins\Testing\CallLog|null $log
      */
-    public function __construct(array $request = [], CallLog $log = null)
+    public function __construct(array $request = [], ?CallLog $log = null)
     {
         $this->initRecorder($log);
         $this->setRequest($request);

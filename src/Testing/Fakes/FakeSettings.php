@@ -55,7 +55,7 @@ class FakeSettings
     /**
      * @param \MyAdmin\Plugins\Testing\CallLog|null $log shared log, see {@see Recorder}
      */
-    public function __construct(CallLog $log = null)
+    public function __construct(?CallLog $log = null)
     {
         $this->initRecorder($log);
     }

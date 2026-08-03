@@ -87,7 +87,7 @@ class FakeDb
      * @param array<int,array<string,mixed>>       $rows rows to hand out via next_record()
      * @param \MyAdmin\Plugins\Testing\CallLog|null $log  shared log, see {@see Recorder}
      */
-    public function __construct(array $rows = [], CallLog $log = null)
+    public function __construct(array $rows = [], ?CallLog $log = null)
     {
         $this->initRecorder($log);
         $this->rows = new \ArrayObject(array_values($rows));

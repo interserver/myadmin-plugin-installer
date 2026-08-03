@@ -24,7 +24,7 @@ class FakeHistory
     /**
      * @param \MyAdmin\Plugins\Testing\CallLog|null $log
      */
-    public function __construct(CallLog $log = null)
+    public function __construct(?CallLog $log = null)
     {
         $this->initRecorder($log);
     }

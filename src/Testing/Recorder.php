@@ -34,7 +34,7 @@ trait Recorder
      * @param \MyAdmin\Plugins\Testing\CallLog|null $log an existing log to share, or null for a fresh one
      * @return void
      */
-    protected function initRecorder(CallLog $log = null)
+    protected function initRecorder(?CallLog $log = null)
     {
         $this->callLog = $log ?: new CallLog();
     }

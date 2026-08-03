@@ -52,7 +52,7 @@ class FakeAccounts
      * @param array<string,mixed>                  $data current account row
      * @param \MyAdmin\Plugins\Testing\CallLog|null $log
      */
-    public function __construct(array $data = [], CallLog $log = null)
+    public function __construct(array $data = [], ?CallLog $log = null)
     {
         $this->initRecorder($log);
         $this->data = $data;
