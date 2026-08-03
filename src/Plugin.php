@@ -1238,13 +1238,19 @@ class Plugin implements PluginInterface, EventSubscriberInterface, Capable
      * ("/usr/sbin/apache2 -k start"), so it matched nothing and fell off the end of the
      * function returning null implicitly — which then got interpolated into shell commands.
      *
+     * `ps` is a Unix concept and there is no webserver user to find on Windows, so returning
+     * null there is correct. The redirect target still comes from
+     * {@see VendorGuard::nullDevice()} rather than a hardcoded `/dev/null`, because cmd.exe
+     * fails the redirection itself and prints "The system cannot find the path specified." to
+     * the console on every call — noise in an otherwise clean Windows CI leg.
+     *
      * @param \Composer\Script\Event $event
      * @return string|null
      */
     public static function getHttpdUser(Event $event)
     {
         try {
-            $ps = self::runProcess($event, 'ps axo user:32,comm 2>/dev/null');
+            $ps = self::runProcess($event, 'ps axo user:32,comm 2>'.VendorGuard::nullDevice());
         } catch (\Exception $e) {
             return null;
         }
