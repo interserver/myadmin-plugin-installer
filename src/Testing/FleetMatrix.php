@@ -1,0 +1,456 @@
+<?php
+/**
+ * @author Joe Huss <detain@interserver.net>
+ * @copyright 2026
+ * @package MyAdmin
+ * @category Testing
+ */
+
+namespace MyAdmin\Plugins\Testing;
+
+use MyAdmin\Plugins\Testing\Contract\Finding;
+
+/**
+ * Fleet-selection, tabulation and rendering for the Phase 2 triage matrix (gate G2).
+ *
+ * ---------------------------------------------------------------------------------
+ * WHY THIS CLASS EXISTS
+ * ---------------------------------------------------------------------------------
+ * `docs/phase2-triage-matrix.md` was a hand-committed snapshot: no committed program
+ * produced it, so nothing could reproduce it, nothing could detect it going stale, and
+ * its evidence lines had been trimmed to fit. A matrix whose provenance is "someone ran
+ * something once" is an assertion about the fleet, not a measurement of it.
+ *
+ * Everything here is a pure function over already-collected data. The process
+ * management, the filesystem walk and the `docs/` write live in `tools/fleet-matrix.php`,
+ * which is a shim — the same split the parent project applies to `scripts/`: policy in a
+ * testable class, I/O in a CLI wrapper it can be exercised without.
+ *
+ * ---------------------------------------------------------------------------------
+ * THE ROW SHAPE
+ * ---------------------------------------------------------------------------------
+ * Every entry point below consumes or produces this one structure:
+ *
+ *     [
+ *       'detain/myadmin-foo' => [
+ *         'class' => 'Detain\\MyAdminFoo\\Plugin',
+ *         'cells' => [
+ *           'A-1' => ['verdict' => 'pass', 'messages' => []],
+ *           'B-10' => ['verdict' => 'fail', 'messages' => ['[B-10] ...']],
+ *         ],
+ *       ],
+ *     ]
+ *
+ * It is deliberately made of arrays and strings rather than {@see Finding} objects: the
+ * collection step runs one OS process per package (see the shim's docblock for why), so
+ * the data has to survive a JSON round-trip anyway. Taking the serialisable form as the
+ * input type means the tests exercise exactly what the tool exercises.
+ *
+ * ---------------------------------------------------------------------------------
+ * WHY `MISSING` IS A VERDICT AND NOT A ZERO
+ * ---------------------------------------------------------------------------------
+ * If a child process dies, the honest report is "this cell did not run". Summing only the
+ * verdicts that came back would silently shrink the denominator and leave the matrix
+ * reading as complete — the same defect as a skip that renders as a pass, one level up.
+ * {@see census()} therefore counts holes explicitly and {@see renderMarkdown()} puts them
+ * in the headline, so a truncated run cannot be mistaken for a clean one.
+ *
+ * ---------------------------------------------------------------------------------
+ * WHERE THE VOCABULARY LIVES
+ * ---------------------------------------------------------------------------------
+ * {@see verdictFor()} is the single site that turns severities into a cell state, and
+ * {@see GLYPHS} the single site that turns a cell state into a grid character. Both open
+ * questions about this vocabulary — the fourth state that would separate "ran and passed"
+ * from "passed without observing anything", and whether the grid legend grows a glyph —
+ * are one-function changes here rather than a sweep through the renderer.
+ */
+class FleetMatrix
+{
+    /** @var string composer `type` that puts a package in the fleet */
+    const SCOPE_TYPE = 'myadmin-plugin';
+
+    /** @var string every inspector reported a pass */
+    const PASS = 'pass';
+
+    /** @var string at least one inspector reported a failure */
+    const FAIL = 'fail';
+
+    /** @var string no failures, but at least one inspector could not run */
+    const SKIP = 'skip';
+
+    /** @var string the cell was never collected — a hole, not a result */
+    const MISSING = 'missing';
+
+    /** @var array<string,string> grid characters, one per verdict */
+    const GLYPHS = [
+        self::PASS => '.',
+        self::FAIL => '**F**',
+        self::SKIP => '-',
+        self::MISSING => '**?**',
+    ];
+
+    /**
+     * Whether a package belongs to the fleet, judged only by its composer `type`.
+     *
+     * Membership deliberately does not depend on the package being *inspectable*. A
+     * `myadmin-plugin` with no resolvable plugin class is a finding about that package,
+     * reported by {@see renderMarkdown()} under "Excluded packages" — not a reason to
+     * quietly drop it and report a smaller, greener fleet.
+     *
+     * @param array<string,mixed> $composerJson decoded composer.json
+     * @return bool
+     */
+    public static function isInScope(array $composerJson)
+    {
+        return isset($composerJson['type']) && $composerJson['type'] === self::SCOPE_TYPE;
+    }
+
+    /**
+     * The plugin class a package declares, read from its PSR-4 map.
+     *
+     * Resolved from the autoload map and never guessed from the package name: several
+     * packages have a namespace that no transformation of their directory name produces
+     * (`myadmin-powerdns` is `Detain\MyAdminPowerDns`, note the lowercase `ns`), and a
+     * guess that misses reports a construction failure against the wrong subject.
+     *
+     * @param array<string,mixed> $composerJson decoded composer.json
+     * @return string|null fully-qualified class name, or null if no prefix maps to `src`
+     */
+    public static function pluginClassFor(array $composerJson)
+    {
+        if (!isset($composerJson['autoload']['psr-4']) || !is_array($composerJson['autoload']['psr-4'])) {
+            return null;
+        }
+        foreach ($composerJson['autoload']['psr-4'] as $prefix => $paths) {
+            foreach ((array)$paths as $path) {
+                if (rtrim((string)$path, '/') === 'src') {
+                    return rtrim((string)$prefix, '\\').'\\Plugin';
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Collapse one inspector's findings into a single cell verdict.
+     *
+     * Failure dominates skip dominates pass: a cell that both failed and skipped is a
+     * failure, because the skip is then a detail of how far the inspector got, not a
+     * statement that nothing was learned.
+     *
+     * {@see Finding::NOTICE} is intentionally not a verdict of its own. A notice is
+     * additional detail about a cell that otherwise passed, and promoting it would make
+     * the matrix's headline count disagree with the suite's.
+     *
+     * @param array<int,string> $severities one {@see Finding} severity per finding
+     * @return string one of the verdict constants (never MISSING — that is the absence of a call)
+     */
+    public static function verdictFor(array $severities)
+    {
+        if (in_array(Finding::FAILURE, $severities, true)) {
+            return self::FAIL;
+        }
+        if (in_array(Finding::SKIPPED, $severities, true)) {
+            return self::SKIP;
+        }
+        return self::PASS;
+    }
+
+    /**
+     * Per-assertion tallies across the whole fleet.
+     *
+     * @param array<string,array<string,mixed>> $rows see the class docblock
+     * @param array<int,string> $ids catalogue ids, in report order
+     * @return array<string,array<string,int>> id => ['pass'=>int,'fail'=>int,'skip'=>int,'missing'=>int]
+     */
+    public static function census(array $rows, array $ids)
+    {
+        $census = [];
+        foreach ($ids as $id) {
+            $census[$id] = [
+                self::PASS => 0,
+                self::FAIL => 0,
+                self::SKIP => 0,
+                self::MISSING => 0,
+            ];
+            foreach ($rows as $row) {
+                $verdict = self::verdictAt($row, $id);
+                $census[$id][$verdict]++;
+            }
+        }
+        return $census;
+    }
+
+    /**
+     * Fleet-wide totals, plus the cell count the run should have produced.
+     *
+     * `cells` is derived from the fleet size times the catalogue size rather than from
+     * the results, so it stays the denominator even when the run is incomplete.
+     *
+     * @param array<string,array<string,mixed>> $rows see the class docblock
+     * @param array<int,string> $ids catalogue ids
+     * @return array<string,int>
+     */
+    public static function totals(array $rows, array $ids)
+    {
+        $totals = [
+            'cells' => count($rows) * count($ids),
+            self::PASS => 0,
+            self::FAIL => 0,
+            self::SKIP => 0,
+            self::MISSING => 0,
+        ];
+        foreach (self::census($rows, $ids) as $counts) {
+            foreach ([self::PASS, self::FAIL, self::SKIP, self::MISSING] as $verdict) {
+                $totals[$verdict] += $counts[$verdict];
+            }
+        }
+        return $totals;
+    }
+
+    /**
+     * Failing cells grouped by assertion, with their full evidence.
+     *
+     * @param array<string,array<string,mixed>> $rows see the class docblock
+     * @param array<int,string> $ids catalogue ids
+     * @return array<string,array<string,array<int,string>>> id => package => messages
+     */
+    public static function failuresBy(array $rows, array $ids)
+    {
+        $out = [];
+        foreach ($ids as $id) {
+            foreach ($rows as $package => $row) {
+                if (self::verdictAt($row, $id) !== self::FAIL) {
+                    continue;
+                }
+                $out[$id][$package] = self::messagesAt($row, $id);
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Package name as the grid column shows it: vendor prefix and the `myadmin-` marker
+     * dropped, because 69 rows of `detain/myadmin-` is 16 characters of nothing.
+     *
+     * @param string $package full composer package name
+     * @return string
+     */
+    public static function shortName($package)
+    {
+        $short = $package;
+        $slash = strrpos($short, '/');
+        if ($slash !== false) {
+            $short = substr($short, $slash + 1);
+        }
+        if (strpos($short, 'myadmin-') === 0) {
+            $short = substr($short, strlen('myadmin-'));
+        }
+        return $short;
+    }
+
+    /**
+     * The whole document.
+     *
+     * Evidence is emitted in full. The previous snapshot cut each message at a fixed
+     * width, which removed the resolved path from every B-10 line — the one part of a
+     * dangling-requirement finding that tells you what to fix.
+     *
+     * @param array<string,array<string,mixed>> $rows see the class docblock
+     * @param array<int,string> $ids catalogue ids, in report order
+     * @param array<string,mixed> $options 'notes' => array<string,string> id => census note,
+     *                                     'excluded' => array<string,string> package => why it is not in the fleet,
+     *                                     'generator' => string command that reproduces this file
+     * @return string markdown
+     */
+    public static function renderMarkdown(array $rows, array $ids, array $options = [])
+    {
+        $notes = isset($options['notes']) && is_array($options['notes']) ? $options['notes'] : [];
+        $excluded = isset($options['excluded']) && is_array($options['excluded']) ? $options['excluded'] : [];
+        $generator = isset($options['generator']) ? (string)$options['generator'] : 'tools/fleet-matrix.php';
+
+        $out = self::renderHeader($rows, $ids, $generator);
+        $out .= self::renderCensus($rows, $ids, $notes);
+        $out .= self::renderExcluded($excluded);
+        $out .= self::renderFailures($rows, $ids);
+        $out .= self::renderGrid($rows, $ids);
+        return $out;
+    }
+
+    // -----------------------------------------------------------------------
+    // Internals
+    // -----------------------------------------------------------------------
+
+    /**
+     * @param array<string,mixed> $row one package's entry
+     * @param string $id catalogue id
+     * @return string verdict constant
+     */
+    private static function verdictAt(array $row, $id)
+    {
+        if (!isset($row['cells'][$id]['verdict'])) {
+            return self::MISSING;
+        }
+        $verdict = (string)$row['cells'][$id]['verdict'];
+        return isset(self::GLYPHS[$verdict]) ? $verdict : self::MISSING;
+    }
+
+    /**
+     * @param array<string,mixed> $row one package's entry
+     * @param string $id catalogue id
+     * @return array<int,string>
+     */
+    private static function messagesAt(array $row, $id)
+    {
+        if (!isset($row['cells'][$id]['messages']) || !is_array($row['cells'][$id]['messages'])) {
+            return [];
+        }
+        return array_values(array_map('strval', $row['cells'][$id]['messages']));
+    }
+
+    /**
+     * @param array<string,array<string,mixed>> $rows
+     * @param array<int,string> $ids
+     * @param string $generator
+     * @return string
+     */
+    private static function renderHeader(array $rows, array $ids, $generator)
+    {
+        $totals = self::totals($rows, $ids);
+        $headline = sprintf(
+            '**%d assertions x %d packages = %d cells** — %d pass, %d fail, %d skip',
+            count($ids),
+            count($rows),
+            $totals['cells'],
+            $totals[self::PASS],
+            $totals[self::FAIL],
+            $totals[self::SKIP]
+        );
+        if ($totals[self::MISSING] > 0) {
+            $headline .= sprintf(
+                ", **%d NOT RUN — this matrix is incomplete and must not be read as a gate result**",
+                $totals[self::MISSING]
+            );
+        }
+
+        return "# Phase 2 — fleet triage matrix (gate G2)\n"
+            ."\n"
+            .$headline.".\n"
+            ."\n"
+            ."Generated — do not hand-edit. Reproduce with:\n"
+            ."\n"
+            ."```bash\n"
+            .$generator."\n"
+            ."```\n"
+            ."\n"
+            ."Every inspector runs over every in-scope plugin, **one process per package**:\n"
+            ."constants are immutable and `register_module()` has no inverse, so a shared process\n"
+            ."would let plugin *n* contaminate plugin *n+1*. Plugin classes are resolved from each\n"
+            ."package's composer PSR-4 map, never guessed from the package name. The fleet is every\n"
+            ."package whose composer `type` is `".self::SCOPE_TYPE."`.\n"
+            ."\n"
+            ."A cell is `skip` when the check could not run, never when it was merely inconvenient —\n"
+            ."a skip that reads as a pass is how a matrix overstates its own coverage. A cell is\n"
+            ."`missing` when its process produced no verdict at all; that is a broken run, not a\n"
+            ."result, and it is counted separately above rather than folded into the denominator.\n"
+            ."\n";
+    }
+
+    /**
+     * @param array<string,array<string,mixed>> $rows
+     * @param array<int,string> $ids
+     * @param array<string,string> $notes
+     * @return string
+     */
+    private static function renderCensus(array $rows, array $ids, array $notes)
+    {
+        $census = self::census($rows, $ids);
+        $anyMissing = false;
+        foreach ($census as $counts) {
+            if ($counts[self::MISSING] > 0) {
+                $anyMissing = true;
+                break;
+            }
+        }
+
+        $out = "## Census\n\n";
+        $out .= $anyMissing
+            ? "| id | pass | fail | skip | not run | note |\n|---|---|---|---|---|---|\n"
+            : "| id | pass | fail | skip | note |\n|---|---|---|---|---|\n";
+        foreach ($ids as $id) {
+            $note = isset($notes[$id]) ? $notes[$id] : '';
+            $cols = [$id, $census[$id][self::PASS], $census[$id][self::FAIL], $census[$id][self::SKIP]];
+            if ($anyMissing) {
+                $cols[] = $census[$id][self::MISSING];
+            }
+            $cols[] = $note;
+            $out .= '| '.implode(' | ', $cols)." |\n";
+        }
+        return $out."\n";
+    }
+
+    /**
+     * @param array<string,string> $excluded
+     * @return string
+     */
+    private static function renderExcluded(array $excluded)
+    {
+        if ($excluded === []) {
+            return '';
+        }
+        ksort($excluded);
+        $out = "## Excluded packages\n\n"
+            ."In scope by composer `type`, but not inspectable. Each line is a defect in that\n"
+            ."package, not a shrinking of the fleet.\n\n";
+        foreach ($excluded as $package => $reason) {
+            $out .= '- **'.$package.'** — '.$reason."\n";
+        }
+        return $out."\n";
+    }
+
+    /**
+     * @param array<string,array<string,mixed>> $rows
+     * @param array<int,string> $ids
+     * @return string
+     */
+    private static function renderFailures(array $rows, array $ids)
+    {
+        $failures = self::failuresBy($rows, $ids);
+        $out = "## Failing cells, classified (all P-bugs — report only, per D7)\n\n";
+        if ($failures === []) {
+            return $out."No failing cells.\n\n";
+        }
+        foreach ($failures as $id => $packages) {
+            $out .= sprintf("### %s — %d package(s)\n\n", $id, count($packages));
+            foreach ($packages as $package => $messages) {
+                $out .= '- **'.$package."**\n";
+                foreach ($messages as $message) {
+                    $out .= '  - '.$message."\n";
+                }
+            }
+            $out .= "\n";
+        }
+        return $out;
+    }
+
+    /**
+     * @param array<string,array<string,mixed>> $rows
+     * @param array<int,string> $ids
+     * @return string
+     */
+    private static function renderGrid(array $rows, array $ids)
+    {
+        $out = "## Grid\n\n"
+            .'`'.self::GLYPHS[self::PASS].'` pass · `F` fail · `'.self::GLYPHS[self::SKIP].'` skip · `?` not run'."\n\n"
+            .'| package | '.implode(' | ', $ids)." |\n"
+            .'|---'.str_repeat('|---', count($ids))."|\n";
+        foreach ($rows as $package => $row) {
+            $cells = [];
+            foreach ($ids as $id) {
+                $cells[] = self::GLYPHS[self::verdictAt($row, $id)];
+            }
+            $out .= '| '.self::shortName($package).' | '.implode(' | ', $cells)." |\n";
+        }
+        return $out;
+    }
+}

@@ -1,0 +1,11 @@
+{
+    "A-7": "cloudlinux dead hooks",
+    "A-9": "0 yield — regression guard",
+    "B-9": "0 yield — regression guard",
+    "B-9b": "cloudlinux dead hooks",
+    "B-10": "dangling requirement paths",
+    "B-11": "packages registering no routes cannot be checked",
+    "B-12": "orphaned getSettings",
+    "B-13": "packages with no getMenu()",
+    "B-14": "packages with no getQueue(), or not services"
+}
