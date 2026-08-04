@@ -409,6 +409,11 @@ class TierB14QueueActionScanner
     /**
      * The expression slice ending immediately before $index, in source order.
      *
+     * Walks backwards, so `{$`/`${`/`#[` are *closers* from this direction and are handled
+     * alongside `(`/`[`/`{`. Without that branch a string containing an interpolation leaves
+     * the walk stuck at depth 1, where nothing breaks the expression any more and the
+     * "operand" runs back to the start of the file.
+     *
      * @param array<int,array{0:int,1:string,2:int}|string> $tokens
      * @param int                                           $index
      * @return array<int,array{0:int,1:string,2:int}|string>
@@ -426,6 +431,11 @@ class TierB14QueueActionScanner
                     break;
                 }
                 $depth--;
+            } elseif (is_array($token) && self::opensCurly($token)) {
+                if ($depth === 0) {
+                    break;
+                }
+                $depth--;
             } elseif ($depth === 0 && self::breaksExpression($token)) {
                 break;
             }
@@ -436,6 +446,8 @@ class TierB14QueueActionScanner
 
     /**
      * The expression slice starting immediately after $index, in source order.
+     *
+     * Forward walk, so `{$`/`${`/`#[` are openers here; see {@see opensCurly()}.
      *
      * @param array<int,array{0:int,1:string,2:int}|string> $tokens
      * @param int                                           $index
@@ -455,6 +467,8 @@ class TierB14QueueActionScanner
                     break;
                 }
                 $depth--;
+            } elseif (is_array($token) && self::opensCurly($token)) {
+                $depth++;
             } elseif ($depth === 0 && self::breaksExpression($token)) {
                 break;
             }
@@ -512,6 +526,14 @@ class TierB14QueueActionScanner
     }
 
     /**
+     * Index of the bracket closing the one at $open, or null when unbalanced.
+     *
+     * Kept token-for-token identical to {@see TierB11RouteCallScanner::matchingBracket()}.
+     * The two are compared against each other by
+     * {@see \Tests\MyAdmin\Plugins\Testing\Contract\TokenScannerAgreementTest}, so an
+     * "improvement" applied to one copy and not the other fails the suite rather than
+     * silently reintroducing the divergence this method used to carry.
+     *
      * @param array<int,array{0:int,1:string,2:int}|string> $tokens
      * @param int                                           $open
      * @return int|null
@@ -529,13 +551,140 @@ class TierB14QueueActionScanner
                 if ($depth === 0) {
                     return $i;
                 }
+            } elseif (is_array($token) && self::opensCurly($token)) {
+                $depth++;
             }
         }
         return null;
     }
 
     /**
+     * `${`, `{$` and `#[` all open a brace that must be counted.
+     *
+     * ---------------------------------------------------------------------------------
+     * DO NOT DELETE THIS BRANCH FROM ANY DEPTH COUNTER
+     * ---------------------------------------------------------------------------------
+     * These three openers arrive as **array** tokens while the braces that close them arrive
+     * as the plain strings `'}'` and `']'`. A counter that only recognises the string `'{'`
+     * therefore misses the open and still takes the close, and desynchronises from that
+     * point on. This class shipped without it: on `f( "{$a}" , "tail" )` it reported the
+     * interpolation's `}` as the end of the argument list, which deleted every argument
+     * after the first. The consequences reached B-14's output as `Finding::failure()`
+     * naming templates that exist on disk, and as literal action sets silently emptied.
+     *
+     * The branch looks like dead weight because no fleet package triggers it *today* —
+     * measured, 0 of 69 — which is exactly why it was left out of three of the four
+     * counters here for as long as it was.
+     *
+     * `T_ATTRIBUTE` is PHP 8 only and the floor is 7.4, so it is resolved at runtime. On 7.4
+     * an `#[...]` line lexes as a comment and is dropped before this is ever consulted.
+     *
+     * @param array{0:int,1:string,2:int} $token
+     * @return bool
+     */
+    private static function opensCurly(array $token)
+    {
+        $openers = [T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES];
+        if (defined('T_ATTRIBUTE')) {
+            $openers[] = constant('T_ATTRIBUTE');
+        }
+        return in_array($token[0], $openers, true);
+    }
+
+    /**
+     * The closing string a given opener is waiting for.
+     *
+     * @param array{0:int,1:string,2:int}|string $token
+     * @return string
+     */
+    private static function closerFor($token)
+    {
+        if (!is_array($token)) {
+            if ($token === '(') {
+                return ')';
+            }
+            return $token === '[' ? ']' : '}';
+        }
+        return defined('T_ATTRIBUTE') && $token[0] === constant('T_ATTRIBUTE') ? ']' : '}';
+    }
+
+    /**
+     * Places where this scanner's bracket alphabet does not add up, in source order.
+     *
+     * ---------------------------------------------------------------------------------
+     * WHY A SEPARATE PASS RATHER THAN A RETURN VALUE
+     * ---------------------------------------------------------------------------------
+     * {@see matchingBracket()} answers `null` when it runs off the end, and can answer with
+     * a closer of the wrong kind when the stream has desynchronised. Every caller here
+     * responds to both by `continue`-ing, which makes a *parse failure* indistinguishable
+     * from *there was nothing to find* — and B-14 renders "nothing to find" as an honest
+     * skip. A silent truncation and honest dynamic dispatch therefore produced the same
+     * green-adjacent cell, which is how the defect above survived a 508-mutant sweep and a
+     * 69-package fleet run.
+     *
+     * This walks the same token alphabet with a stack instead of a counter, which makes it a
+     * **conservative** precondition for the counters, in one direction only:
+     *
+     *  - `[]` **guarantees** `matchingBracket()` returns the true partner, of the matching
+     *    kind, for every opener in the stream. That is the direction the caller relies on.
+     *  - a non-empty result does **not** guarantee any particular query is wrong. A surplus
+     *    closer trailing a stream whose openers all pair up correctly is reported here and
+     *    harms nothing. That asymmetry is deliberate and must not be "tightened": the
+     *    consumer turns a non-empty result into a skip, so over-reporting costs a check that
+     *    was going to be a skip anyway, while under-reporting is the silent truncation this
+     *    whole method exists to end.
+     *
+     * The guarantee and its deliberate one-sidedness are both pinned by
+     * {@see \Tests\MyAdmin\Plugins\Testing\Contract\TierB14ScannerSoundnessTest}.
+     *
+     * It is a pure function of the source rather than state left behind by the last scan, so
+     * a caller can ask before, after, or instead of scanning.
+     *
+     * @param string $source PHP source including the opening tag
+     * @return array<int,string> human-readable, one per unmatched or mismatched bracket
+     */
+    public static function scanDesyncs($source)
+    {
+        $tokens = self::significant(token_get_all($source));
+        $stack = [];
+        $problems = [];
+        $line = 0;
+        foreach ($tokens as $token) {
+            if (is_array($token)) {
+                $line = $token[2];
+                if (self::opensCurly($token)) {
+                    $stack[] = [self::closerFor($token), $line, $token[1]];
+                }
+                continue;
+            }
+            if ($token === '(' || $token === '[' || $token === '{') {
+                $stack[] = [self::closerFor($token), $line, $token];
+                continue;
+            }
+            if ($token !== ')' && $token !== ']' && $token !== '}') {
+                continue;
+            }
+            if ($stack === []) {
+                $problems[] = 'unmatched "'.$token.'" on line '.$line;
+                continue;
+            }
+            $expected = array_pop($stack);
+            if ($expected[0] !== $token) {
+                $problems[] = '"'.$token.'" on line '.$line.' closes "'.$expected[2].'" from line '
+                    .$expected[1].', which expected "'.$expected[0].'"';
+            }
+        }
+        foreach ($stack as $unclosed) {
+            $problems[] = '"'.$unclosed[2].'" on line '.$unclosed[1].' is never closed by "'.$unclosed[0].'"';
+        }
+        return $problems;
+    }
+
+    /**
      * Splits a slice on a top-level separator token.
+     *
+     * The `opensCurly()` branch is what keeps the comma after an interpolated argument
+     * top-level; see that method before touching the depth arithmetic here.
      *
      * @param array<int,array{0:int,1:string,2:int}|string> $slice
      * @param string                                        $separator
@@ -554,6 +703,8 @@ class TierB14QueueActionScanner
                 $depth++;
             } elseif ($token === ')' || $token === ']' || $token === '}') {
                 $depth--;
+            } elseif (is_array($token) && self::opensCurly($token)) {
+                $depth++;
             }
             if ($token === $separator && $depth === 0) {
                 $parts[] = $current;

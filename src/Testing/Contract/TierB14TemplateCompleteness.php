@@ -63,6 +63,34 @@ use Throwable;
  * handler names no action literally, there is nothing to cross-check and the result is a
  * skip carrying that reason — not a pass. On today's fleet that is the outcome for six of
  * the eight, which is an honest statement of what B-14 can see rather than six green cells.
+ *
+ * ---------------------------------------------------------------------------------
+ * TWO SKIPS THAT LOOK REDUNDANT AND ARE NOT
+ * ---------------------------------------------------------------------------------
+ * Both were added after a review found this class emitting `Finding::failure()` naming
+ * templates that exist on disk. Neither is defensive padding; each has a reproduction.
+ *
+ *  1. **{@see TierB14QueueActionScanner::scanDesyncs()} is consulted before anything is
+ *     read out of the source.** Every conclusion below — which directory, which actions —
+ *     is derived from one token walk. When that walk desynchronises, "no actions found" and
+ *     "the scan fell over" are the same observation, and the honest-skip branch at the
+ *     bottom of {@see crossCheck()} swallowed both. Skipping *loudly*, with
+ *     {@see SCAN_TRUNCATED} in the reason, is the difference between a fleet run that says
+ *     "68 cells had nothing to check" and one that says which of those were the harness
+ *     failing. It cannot manufacture a false failure either, which the truncation could.
+ *
+ *  2. **A dispatch with `anchor === 'relative'` and an empty `directory` is skipped rather
+ *     than resolved.** This is what a `.=`-assembled path produces: the `.sh.tpl` suffix
+ *     arrives on its own line with no directory literal attached, so the recovered directory
+ *     is the empty string. Resolving that against {@see PluginSubject::packageDir()} does
+ *     not degrade gracefully — it silently retargets the whole check at the *package root*,
+ *     finds none of the templates that live one level down in `templates/`, and reports
+ *     every literal action as missing. It is an independent defect from (1): it reproduces
+ *     from a plain `.=` chain with no interpolation anywhere.
+ *
+ *     Only the first dispatch is examined, here as before. A source that mixes an
+ *     unrecoverable fragment with a usable chain skips on the fragment; first-seen-wins is
+ *     the pre-existing rule and widening it is a separate decision.
  */
 class TierB14TemplateCompleteness implements PluginInspector
 {
@@ -84,6 +112,19 @@ class TierB14TemplateCompleteness implements PluginInspector
      * @var string
      */
     const TEMPLATE_GLOB = '*.sh.tpl';
+
+    /**
+     * Prefix that marks the "the scanner broke, this is not an honest skip" reason.
+     *
+     * A parse failure and "there was genuinely nothing to cross-check" used to render as the
+     * same skip, so a silently truncated scan was indistinguishable from a handler that
+     * dispatches on queue data. `Finding::NOTICE` would be the natural severity for the
+     * difference, but it is currently collected by no consumer, so the distinction is
+     * carried in the reason text where `grep` can find it across a fleet run.
+     *
+     * @var string
+     */
+    const SCAN_TRUNCATED = 'B-14 scan truncated';
 
     /**
      * @return string
@@ -132,12 +173,30 @@ class TierB14TemplateCompleteness implements PluginInspector
                 'class' => $subject->pluginClass(),
             ])];
         }
+        $desyncs = TierB14QueueActionScanner::scanDesyncs($source);
+        if ($desyncs !== []) {
+            return [Finding::skipped(
+                $this->id(),
+                self::SCAN_TRUNCATED.': the token scan of '.self::QUEUE_METHOD.'() desynchronised ('
+                    .implode('; ', $desyncs).'), so neither the template directory nor the action set '
+                    .'recovered from it can be trusted',
+                ['class' => $subject->pluginClass(), 'desyncs' => count($desyncs)]
+            )];
+        }
         $dispatches = TierB14QueueActionScanner::templateDispatches($source);
         if ($dispatches === []) {
             return [Finding::skipped(
                 $this->id(),
                 self::QUEUE_METHOD.'() does not render '.self::TEMPLATE_GLOB.' templates',
                 ['class' => $subject->pluginClass()]
+            )];
+        }
+        if ($dispatches[0]['anchor'] === 'relative' && $dispatches[0]['directory'] === '') {
+            return [Finding::skipped(
+                $this->id(),
+                self::QUEUE_METHOD.'() reaches the '.TierB14QueueActionScanner::TEMPLATE_SUFFIX.' suffix without a '
+                    .'directory literal attached to it, so the render directory is not recoverable from the source',
+                ['class' => $subject->pluginClass(), 'template' => $dispatches[0]['template']]
             )];
         }
         $directory = $this->resolveDirectory($subject, $method, $dispatches[0]);
