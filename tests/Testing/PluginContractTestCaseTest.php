@@ -16,11 +16,13 @@ use MyAdmin\Plugins\Testing\PluginContractTestCase;
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\TestResult;
 use Tests\MyAdmin\Plugins\Testing\Fixtures\PctcCaseEveryHatch;
+use Tests\MyAdmin\Plugins\Testing\Fixtures\PctcCaseHatchedRoot;
 use Tests\MyAdmin\Plugins\Testing\Fixtures\PctcCaseMissingPlugin;
 use Tests\MyAdmin\Plugins\Testing\Fixtures\PctcCaseOptedOutOfRequirementRoot;
 use Tests\MyAdmin\Plugins\Testing\Fixtures\PctcCasePlain;
 use Tests\MyAdmin\Plugins\Testing\Fixtures\PctcCasePrimedPlugin;
 use Tests\MyAdmin\Plugins\Testing\Fixtures\PctcFixturePlugin;
+use Tests\MyAdmin\Plugins\Testing\Fixtures\PctcHatchedRequirementPlugin;
 
 /**
  * Pins the D7 split and the escape-hatch disclosure of the base test case plugin repos
@@ -55,6 +57,17 @@ use Tests\MyAdmin\Plugins\Testing\Fixtures\PctcFixturePlugin;
 class PluginContractTestCaseTest extends TestCase
 {
     /**
+     * The case object from the most recent {@see runContractCase()}, for the handful of
+     * properties that live on the test rather than on its result.
+     *
+     * @var \MyAdmin\Plugins\Testing\PluginContractTestCase|null
+     */
+    private $lastCase;
+
+    /** @var array<int,string> scratch directories to remove, deepest first */
+    private $scratchDirs = [];
+
+    /**
      * Runs one contract assertion the way PHPUnit would, in its own result.
      *
      * The `$dataName` is what PHPUnit prints after the method name, so it is set to the same
@@ -69,6 +82,7 @@ class PluginContractTestCaseTest extends TestCase
         $case = new $caseClass('testPluginSatisfiesContractAssertion', [$inspectorClass], 'fixture case');
         $result = new TestResult();
         $case->run($result);
+        $this->lastCase = $case;
 
         $this->assertSame(1, $result->count(), 'exactly one contract assertion should have run');
 
@@ -100,6 +114,82 @@ class PluginContractTestCaseTest extends TestCase
         $skipped = $result->skipped();
 
         return $skipped[0]->thrownException()->getMessage();
+    }
+
+    /**
+     * @param TestResult $result
+     * @return string
+     */
+    private function soleIncompleteMessage(TestResult $result)
+    {
+        $this->assertSame(1, $result->notImplementedCount(), 'expected exactly one incomplete run');
+        $this->assertSame(0, $result->failureCount());
+        $this->assertSame(0, $result->errorCount());
+        $this->assertSame(0, $result->skippedCount());
+        $incomplete = $result->notImplemented();
+
+        return $incomplete[0]->thrownException()->getMessage();
+    }
+
+    /**
+     * The ledger is process-global by necessity — seventeen PHPUnit instances and sixty-nine
+     * fleet subjects have no object to share — so every test that reads it starts from empty
+     * and leaves it empty. Without this, an assertion on "the ledger holds one entry" would
+     * pass or fail depending on which tests ran first.
+     *
+     * @return void
+     */
+    protected function tearDown(): void
+    {
+        PluginContractTestCase::clearOverrideLedger();
+        foreach (array_reverse($this->scratchDirs) as $dir) {
+            $this->removeTree($dir);
+        }
+        $this->scratchDirs = [];
+        PctcCaseHatchedRoot::$root = '';
+    }
+
+    /**
+     * @param string $dir
+     * @return void
+     */
+    private function removeTree($dir)
+    {
+        if (!is_dir($dir)) {
+            return;
+        }
+        foreach (scandir($dir) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            $path = $dir.'/'.$entry;
+            if (is_dir($path)) {
+                $this->removeTree($path);
+            } else {
+                @unlink($path);
+            }
+        }
+        @rmdir($dir);
+    }
+
+    /**
+     * A throwaway requirement root, optionally holding the one file
+     * {@see PctcHatchedRequirementPlugin} registers.
+     *
+     * @param bool $withTheFile
+     * @return string absolute path
+     */
+    private function makeHatchRoot($withTheFile)
+    {
+        $root = sys_get_temp_dir().'/pctc-hatch-'.getmypid().'-'.mt_rand();
+        mkdir($root, 0777, true);
+        $this->scratchDirs[] = $root;
+        if ($withTheFile) {
+            $full = $root.PctcHatchedRequirementPlugin::SOURCE;
+            mkdir(dirname($full), 0777, true);
+            file_put_contents($full, "<?php\n");
+        }
+        return $root;
     }
 
     // -----------------------------------------------------------------------
@@ -246,21 +336,319 @@ class PluginContractTestCaseTest extends TestCase
     }
 
     /**
+     * The disclosure names each hatch **and its value**. Naming `requirementRoot` without
+     * saying what it points at is not actionable: the reviewed abuse case is entirely about
+     * which directory it names, and both misuse directions produce the same hatch name.
+     *
      * @return void
      */
-    public function testOverrideDescriptionNamesEveryActiveHatch()
+    public function testOverrideDescriptionNamesEveryActiveHatchAndItsValue()
     {
         $this->assertSame(
-            'Per-repo overrides in effect (review under gate G2): requirementRoot.',
+            'Per-repo overrides in effect (review under gate G2): '
+            .'requirementRoot=null (opts out of the B-10 requirement-path check).',
             (new PctcCaseOptedOutOfRequirementRoot('testPluginSatisfiesContractAssertion'))
                 ->describeOverridesForTest()
         );
 
         $this->assertSame(
             'Per-repo overrides in effect (review under gate G2): '
-            .'expectedType, requirementRoot, serviceDefines, constantOverrides.',
+            ."expectedType='module', requirementRoot='/srv/pctc-fixture', "
+            ."serviceDefines=[PCTC_FIXTURE_SERVICE=4242], constantOverrides=[PCTC_FIXTURE_BILLING='prorate'].",
             (new PctcCaseEveryHatch('testPluginSatisfiesContractAssertion'))->describeOverridesForTest()
         );
+    }
+
+    /**
+     * An explicit `null` root and a non-null one are both `requirementRoot`, and only one of
+     * them removes an assertion. A disclosure that rendered them alike would name the hatch
+     * without disclosing the thing worth reviewing.
+     *
+     * @return void
+     */
+    public function testOptOutIsDistinguishableFromAnOrdinaryRootInTheDisclosure()
+    {
+        $optOut = (new PctcCaseOptedOutOfRequirementRoot('testPluginSatisfiesContractAssertion'))
+            ->describeOverridesForTest();
+        $ordinary = (new PctcCaseEveryHatch('testPluginSatisfiesContractAssertion'))
+            ->describeOverridesForTest();
+
+        $this->assertStringContainsString('opts out of the B-10 requirement-path check', $optOut);
+        $this->assertStringNotContainsString('opts out of', $ordinary);
+    }
+
+    /**
+     * Tripwire for a fifth hatch. {@see PluginSubject::overridesInUse()} is the authority on
+     * which hooks exist; `overrideValues()` has to be taught each one by hand. A hatch added
+     * there and forgotten here would be logged with no value at all — recorded, but not
+     * reviewable, which is the half of G2 that matters.
+     *
+     * @return void
+     */
+    public function testEveryDeclaredHatchHasAReadableValue()
+    {
+        $subject = (new PctcCaseEveryHatch('testPluginSatisfiesContractAssertion'))->contractSubjectForTest();
+        $values = PctcCasePlain::overrideValuesForTest($subject);
+
+        $this->assertSame($subject->overridesInUse(), array_keys($values));
+        foreach ($values as $name => $value) {
+            $this->assertNotSame(
+                PluginContractTestCase::OVERRIDE_VALUE_UNKNOWN,
+                $value,
+                $name.' is declared by PluginSubject::overridesInUse() but PluginContractTestCase'
+                .'::overrideValues() cannot read it — teach it the new hatch.'
+            );
+        }
+    }
+
+    /**
+     * What the tripwire above protects, driven through a subject that declares a hatch this
+     * class has not been taught. G2 asks for the hatch to be *logged*, so the name has to
+     * survive even when the value cannot be read — and the gap has to look like a gap rather
+     * than like a hatch whose value happened to be null, which is a thing three of the four
+     * real hatches can legitimately be.
+     *
+     * @return void
+     */
+    public function testAHatchWithNoReadableValueIsStillLoggedByName()
+    {
+        $subject = new PctcSubjectWithAnExtraHatch(PctcFixturePlugin::class, ['requirementRoot' => '/srv/x']);
+        $values = PctcCasePlain::overrideValuesForTest($subject);
+
+        $this->assertSame(['requirementRoot', 'pctcFutureHatch'], array_keys($values));
+        $this->assertSame('/srv/x', $values['requirementRoot']);
+        $this->assertSame(PluginContractTestCase::OVERRIDE_VALUE_UNKNOWN, $values['pctcFutureHatch']);
+
+        $described = (new PctcCasePlain('testPluginSatisfiesContractAssertion'))
+            ->describeOverridesForSubject($subject);
+        $this->assertStringContainsString('pctcFutureHatch=(value not exposed to the override log)', $described);
+        $this->assertStringNotContainsString('pctcFutureHatch=null', $described);
+    }
+
+    /**
+     * And the ledger records it too — a hatch a generator cannot value is still a hatch a
+     * reviewer has to see.
+     *
+     * @return void
+     */
+    public function testAHatchWithNoReadableValueStillReachesTheLedger()
+    {
+        PluginContractTestCase::clearOverrideLedger();
+        $subject = new PctcSubjectWithAnExtraHatch(PctcFixturePlugin::class, ['requirementRoot' => '/srv/x']);
+
+        PctcCasePlain::recordOverrideUseForTest(
+            $subject,
+            PluginContractTestCase::SOURCE_FLEET,
+            'B-10',
+            'pass'
+        );
+
+        $ledger = PluginContractTestCase::overrideLedger();
+        $this->assertCount(1, $ledger);
+        $this->assertSame(
+            ['requirementRoot' => '/srv/x', 'pctcFutureHatch' => PluginContractTestCase::OVERRIDE_VALUE_UNKNOWN],
+            $ledger[0]['overrides']
+        );
+    }
+
+    /**
+     * A skip is a verdict reached under whatever hatches were active, exactly like a
+     * failure. Disclosing on one and not the other is how "requirementRoot(): null" came to
+     * be reported by B-10 as a skip whose message never mentioned that a repo had switched
+     * the assertion off.
+     *
+     * @return void
+     */
+    public function testSkipMessageDisclosesTheOverridesItWasReachedUnder()
+    {
+        $none = $this->soleSkipMessage(
+            $this->runContractCase(PctcCasePlain::class, PctcInspectorOnlySkips::class)
+        );
+        $this->assertStringContainsString('No per-repo overrides are in effect.', $none);
+
+        $hatched = $this->soleSkipMessage(
+            $this->runContractCase(PctcCaseOptedOutOfRequirementRoot::class, PctcInspectorOnlySkips::class)
+        );
+        $this->assertStringContainsString(
+            'Per-repo overrides in effect (review under gate G2): '
+            .'requirementRoot=null (opts out of the B-10 requirement-path check).',
+            $hatched
+        );
+    }
+
+    /**
+     * @return void
+     */
+    public function testIncompleteMessageDisclosesTheOverridesItWasReachedUnder()
+    {
+        $message = $this->soleIncompleteMessage(
+            $this->runContractCase(PctcCaseOptedOutOfRequirementRoot::class, PctcInspectorOnlyNotices::class)
+        );
+
+        $this->assertStringContainsString('Per-repo overrides in effect (review under gate G2)', $message);
+        $this->assertStringContainsString('requirementRoot=null', $message);
+    }
+
+    // -----------------------------------------------------------------------
+    // Gate G2: the hatch record ("each is logged when used")
+    // -----------------------------------------------------------------------
+
+    /**
+     * Guards every ledger assertion below from being vacuous. If the fixture's hatch stopped
+     * changing the verdict, "green under a hatch" would still be true and would prove
+     * nothing — the ledger would be recording an override that was doing no work.
+     *
+     * Both roots exist, so both clear the `is_dir()` gate; the only difference is whether the
+     * file the plugin registers is inside. That is the abuse shape exactly: a legal-looking
+     * hatch value that turns a real dangling-path failure green.
+     *
+     * @return void
+     */
+    public function testTheFixtureHatchGenuinelyChangesTheVerdict()
+    {
+        PctcCaseHatchedRoot::$root = $this->makeHatchRoot(false);
+        $withoutTheFile = $this->runContractCase(
+            PctcCaseHatchedRoot::class,
+            \MyAdmin\Plugins\Testing\Contract\TierB10RequirementPathsResolve::class
+        );
+        $this->assertStringContainsString(
+            'hatched.php',
+            $this->soleFailureMessage($withoutTheFile),
+            'the un-silenced run must report the dangling path'
+        );
+
+        PctcCaseHatchedRoot::$root = $this->makeHatchRoot(true);
+        $withTheFile = $this->runContractCase(
+            PctcCaseHatchedRoot::class,
+            \MyAdmin\Plugins\Testing\Contract\TierB10RequirementPathsResolve::class
+        );
+        $this->assertTrue($withTheFile->wasSuccessful(), 'and the hatched run must be green');
+        $this->assertSame(0, $withTheFile->failureCount());
+        $this->assertSame(0, $withTheFile->skippedCount());
+        $this->assertSame(0, $withTheFile->notImplementedCount(), 'green, with nothing on screen to read');
+    }
+
+    /**
+     * The G2 requirement, and the one thing the old disclosure could not do: a hatch that
+     * **succeeds** in silencing a defect leaves a record.
+     *
+     * `describeOverrides()` used to be reachable only from `$this->fail()`, so the log fired
+     * exactly when the hatch had failed to hide anything. The run below is green — there is
+     * no failure message for a disclosure to ride on — and the hatch is still recorded, with
+     * the value that did the silencing.
+     *
+     * @return void
+     */
+    public function testAHatchThatSilencesADefectIsRecordedOnThePassingPath()
+    {
+        PluginContractTestCase::clearOverrideLedger();
+        $root = $this->makeHatchRoot(true);
+        PctcCaseHatchedRoot::$root = $root;
+
+        $result = $this->runContractCase(
+            PctcCaseHatchedRoot::class,
+            \MyAdmin\Plugins\Testing\Contract\TierB10RequirementPathsResolve::class
+        );
+        $this->assertTrue($result->wasSuccessful(), 'the premise is a green run');
+
+        $ledger = PluginContractTestCase::overrideLedger();
+        $this->assertCount(1, $ledger, 'a green run under a hatch must still be recorded');
+        $this->assertSame(PctcHatchedRequirementPlugin::class, $ledger[0]['plugin']);
+        $this->assertSame(PluginContractTestCase::SOURCE_PHPUNIT, $ledger[0]['source']);
+        $this->assertSame('B-10', $ledger[0]['assertion']);
+        $this->assertSame('pass', $ledger[0]['outcome'], 'pass-under-a-hatch is the entry G2 is looking for');
+        $this->assertSame(['requirementRoot' => $root], $ledger[0]['overrides']);
+    }
+
+    /**
+     * The record is structured, not prose. A matrix generator has to group hatch use by
+     * package and assertion across sixty-nine repos, and one that recovered its data by
+     * scraping a failure message would break the next time a message is reworded — which
+     * this very changeset does.
+     *
+     * @return void
+     */
+    public function testTheHatchRecordIsStructuredDataRatherThanAFormattedString()
+    {
+        PluginContractTestCase::clearOverrideLedger();
+        $this->runContractCase(PctcCaseEveryHatch::class, PctcInspectorPasses::class);
+
+        $ledger = PluginContractTestCase::overrideLedger();
+        $this->assertCount(1, $ledger);
+        $this->assertSame(
+            ['plugin', 'source', 'assertion', 'outcome', 'overrides'],
+            array_keys($ledger[0]),
+            'the entry shape is what a generator consumes; changing it is a breaking change'
+        );
+        $this->assertSame(
+            [
+                'expectedType' => 'module',
+                'requirementRoot' => '/srv/pctc-fixture',
+                'serviceDefines' => ['PCTC_FIXTURE_SERVICE' => 4242],
+                'constantOverrides' => ['PCTC_FIXTURE_BILLING' => 'prorate'],
+            ],
+            $ledger[0]['overrides'],
+            'values must be recorded as values, not rendered'
+        );
+    }
+
+    /**
+     * Every outcome, not just the green one. A record that skipped the failing and skipping
+     * paths would leave a reviewer unable to tell "this hatch is load-bearing" from "this
+     * hatch is inert".
+     *
+     * @return void
+     */
+    public function testEveryOutcomeIsRecordedAgainstTheHatchThatWasInEffect()
+    {
+        $expected = [
+            PctcInspectorPasses::class => 'pass',
+            PctcInspectorOnlyNotices::class => 'notice',
+            PctcInspectorOnlySkips::class => 'skip',
+            PctcInspectorReturnsFailure::class => 'fail',
+            PctcInspectorThrows::class => 'harness-bug',
+        ];
+
+        foreach ($expected as $inspector => $outcome) {
+            PluginContractTestCase::clearOverrideLedger();
+            $this->runContractCase(PctcCaseOptedOutOfRequirementRoot::class, $inspector);
+
+            $ledger = PluginContractTestCase::overrideLedger();
+            $this->assertCount(1, $ledger, $inspector.' must contribute exactly one entry');
+            $this->assertSame($outcome, $ledger[0]['outcome'], $inspector.' recorded the wrong outcome');
+            $this->assertSame(['requirementRoot' => null], $ledger[0]['overrides']);
+        }
+    }
+
+    /**
+     * "Logged when used" — not "logged". A repo that overrides nothing would otherwise
+     * contribute 17 entries per run and 1173 across the fleet, and a hatch record nobody can
+     * read is the same as no hatch record.
+     *
+     * @return void
+     */
+    public function testARunWithNoHatchInUseIsNotRecorded()
+    {
+        PluginContractTestCase::clearOverrideLedger();
+
+        $this->runContractCase(PctcCasePlain::class, PctcInspectorPasses::class);
+        $this->runContractCase(PctcCasePlain::class, PctcInspectorReturnsFailure::class);
+        $this->runContractCase(PctcCasePlain::class, PctcInspectorOnlySkips::class);
+
+        $this->assertSame([], PluginContractTestCase::overrideLedger());
+    }
+
+    /**
+     * @return void
+     */
+    public function testTheLedgerCanBeCleared()
+    {
+        PluginContractTestCase::clearOverrideLedger();
+        $this->runContractCase(PctcCaseEveryHatch::class, PctcInspectorPasses::class);
+        $this->assertNotSame([], PluginContractTestCase::overrideLedger());
+
+        PluginContractTestCase::clearOverrideLedger();
+        $this->assertSame([], PluginContractTestCase::overrideLedger());
     }
 
     // -----------------------------------------------------------------------
@@ -330,7 +718,8 @@ class PluginContractTestCaseTest extends TestCase
         );
         $this->assertStringContainsString(
             'Per-repo overrides in effect (review under gate G2): '
-            .'expectedType, requirementRoot, serviceDefines, constantOverrides.',
+            ."expectedType='module', requirementRoot='/srv/pctc-fixture', "
+            ."serviceDefines=[PCTC_FIXTURE_SERVICE=4242], constantOverrides=[PCTC_FIXTURE_BILLING='prorate'].",
             $hatched
         );
     }
@@ -366,7 +755,8 @@ class PluginContractTestCaseTest extends TestCase
         );
 
         $this->assertStringContainsString(
-            'Per-repo overrides in effect (review under gate G2): requirementRoot.',
+            'Per-repo overrides in effect (review under gate G2): '
+            .'requirementRoot=null (opts out of the B-10 requirement-path check).',
             $message
         );
     }
@@ -457,6 +847,111 @@ class PluginContractTestCaseTest extends TestCase
         $this->assertSame(0, $result->skippedCount());
         $this->assertSame(0, $result->errorCount());
         $this->assertTrue($result->wasSuccessful());
+    }
+
+    /**
+     * The R-5 defect, stated as an assertion: an inspector returning one notice and nothing
+     * else used to produce a run byte-for-byte identical to one that found nothing at all.
+     * A severity documented as "reported" that no consumer reads is worse than no severity,
+     * because the next author routes a downgraded failure through it and turns a false
+     * failure into silence.
+     *
+     * @return void
+     */
+    public function testALoneNoticeIsReportedRatherThanReadingAsASilentGreen()
+    {
+        $noticing = $this->runContractCase(PctcCasePlain::class, PctcInspectorOnlyNotices::class);
+        $silent = $this->runContractCase(PctcCasePlain::class, PctcInspectorPasses::class);
+
+        $this->assertSame(1, $noticing->notImplementedCount(), 'a notice must land in a bucket of its own');
+        $this->assertSame(0, $silent->notImplementedCount(), 'and a run with nothing to say must not');
+
+        $message = $this->soleIncompleteMessage($noticing);
+        $this->assertStringContainsString('F-7', $message, 'the assertion must be named');
+        $this->assertStringContainsString(PctcFixturePlugin::class, $message, 'the plugin must be named');
+        $this->assertStringContainsString('fixture observation, informational only', $message);
+        $this->assertStringContainsString('satisfies this assertion', $message, 'and it is not a violation');
+        $this->assertStringContainsString('No per-repo overrides are in effect.', $message);
+    }
+
+    /**
+     * The bucket is the reason this rendering was chosen: incomplete is the only PHPUnit
+     * outcome that is visible by default, distinct from pass, fail and skip, and non-fatal
+     * under the `failOnRisky` / `failOnWarning` settings every fleet `phpunit.xml.dist`
+     * carries. If a notice ever failed a build, sixty-nine repos go red over something that
+     * is not a defect.
+     *
+     * @return void
+     */
+    public function testANoticeDoesNotFailTheBuildAndIsNotRisky()
+    {
+        $result = $this->runContractCase(PctcCasePlain::class, PctcInspectorOnlyNotices::class);
+
+        $this->assertTrue($result->wasSuccessful(), 'a notice must never fail the build');
+        $this->assertSame(0, $result->failureCount());
+        $this->assertSame(0, $result->errorCount());
+        $this->assertSame(0, $result->warningCount(), 'failOnWarning="true" would make a warning fatal');
+        $this->assertSame(
+            0,
+            $result->riskyCount(),
+            'the contract assertion must be recorded before the test is marked incomplete'
+        );
+    }
+
+    /**
+     * An incomplete run has to carry the same recorded assertion a green one does, or
+     * "this cell was checked" stops being true of it — and the ordering that guarantees it
+     * (assert, then mark incomplete) is invisible to every other test here, because PHPUnit 9
+     * does not apply its no-assertions risky check to an incomplete test.
+     *
+     * @return void
+     */
+    public function testTheContractAssertionIsRecordedEvenWhenTheRunIsIncomplete()
+    {
+        $green = $this->runContractCase(PctcCasePlain::class, PctcInspectorPasses::class);
+        $greenAssertions = $this->lastCase->getNumAssertions();
+
+        $incomplete = $this->runContractCase(PctcCasePlain::class, PctcInspectorOnlyNotices::class);
+
+        $this->assertSame(1, $incomplete->notImplementedCount(), 'the premise is an incomplete run');
+        $this->assertSame(0, $green->notImplementedCount());
+        $this->assertGreaterThan(0, $greenAssertions, 'a green run records the contract assertion');
+        $this->assertSame(
+            $greenAssertions,
+            $this->lastCase->getNumAssertions(),
+            'an incomplete run must record it too — assert first, mark incomplete second'
+        );
+    }
+
+    /**
+     * The mixed case the base class documents as deliberately *not* a skip. It used to be a
+     * plain green in which the notice and the skip both vanished; the notice now carries
+     * both into a message a maintainer sees.
+     *
+     * @return void
+     */
+    public function testASkipAlongsideANoticeIsDisclosedRatherThanDropped()
+    {
+        $result = $this->runContractCase(PctcCasePlain::class, PctcInspectorSkipsAndNotices::class);
+        $message = $this->soleIncompleteMessage($result);
+
+        $this->assertStringContainsString('fixture observation', $message, 'the notice must be shown');
+        $this->assertStringContainsString('fixture reason beside a notice', $message, 'and so must the skip');
+        $this->assertStringContainsString('could not run', $message);
+    }
+
+    /**
+     * Failure still outranks a notice: an inspector that found a violation and also observed
+     * something must report the violation, or the notice buries the defect.
+     *
+     * @return void
+     */
+    public function testANoticeAlongsideAFailureStillFails()
+    {
+        $result = $this->runContractCase(PctcCasePlain::class, PctcInspectorNoticesAndFails::class);
+
+        $this->assertSame(0, $result->notImplementedCount());
+        $this->assertStringContainsString('fixture violation beside a notice', $this->soleFailureMessage($result));
     }
 
     /**
@@ -577,6 +1072,80 @@ class PluginContractTestCaseTest extends TestCase
                 ['harnessBug' => true, 'exception' => 'RuntimeException'],
                 $finding->context()
             );
+        }
+    }
+
+    /**
+     * The fleet path is the one that produces the gate-G2 artefact, and it used to emit no
+     * override record whatsoever — so the artefact the gate is reviewed against could not
+     * carry the hatch log the gate asks for, no matter how the reviewer read it.
+     *
+     * @return void
+     */
+    public function testInspectAllRecordsHatchUseOncePerAssertion()
+    {
+        PluginContractTestCase::clearOverrideLedger();
+        $subject = new PluginSubject(PctcFixturePlugin::class, ['requirementRoot' => '/srv/fleet-fixture']);
+
+        PluginContractTestCase::inspectAll($subject);
+
+        $ledger = PluginContractTestCase::overrideLedger();
+        $this->assertCount(count(InspectorRegistry::ids()), $ledger, 'one entry per catalogue assertion');
+        $this->assertSame(InspectorRegistry::ids(), array_column($ledger, 'assertion'));
+        foreach ($ledger as $entry) {
+            $this->assertSame(PluginContractTestCase::SOURCE_FLEET, $entry['source']);
+            $this->assertSame(PctcFixturePlugin::class, $entry['plugin']);
+            $this->assertSame(['requirementRoot' => '/srv/fleet-fixture'], $entry['overrides']);
+            $this->assertContains($entry['outcome'], ['pass', 'notice', 'skip', 'fail', 'harness-bug']);
+        }
+    }
+
+    /**
+     * The hatch record is a side channel, never an extra row. An eighteenth key here would
+     * become an eighteenth matrix cell per package and would move the 17 x 69 census the gate
+     * is read against.
+     *
+     * @return void
+     */
+    public function testInspectAllStillReturnsExactlyTheCatalogueRowsWhenAHatchIsInUse()
+    {
+        $rows = PluginContractTestCase::inspectAll(
+            new PluginSubject(PctcFixturePlugin::class, ['requirementRoot' => '/srv/fleet-fixture'])
+        );
+
+        $this->assertSame(InspectorRegistry::ids(), array_keys($rows));
+    }
+
+    /**
+     * @return void
+     */
+    public function testInspectAllRecordsNothingForASubjectWithNoHatch()
+    {
+        PluginContractTestCase::clearOverrideLedger();
+
+        PluginContractTestCase::inspectAll(new PluginSubject(PctcFixturePlugin::class));
+
+        $this->assertSame([], PluginContractTestCase::overrideLedger());
+    }
+
+    /**
+     * A throwing inspector is filed as a harness bug in the record too, so a hatch cannot be
+     * blamed for — or exonerated by — a cell that never produced a verdict.
+     *
+     * @return void
+     */
+    public function testInspectAllRecordsAHarnessBugOutcomeAgainstTheHatch()
+    {
+        PluginContractTestCase::clearOverrideLedger();
+
+        PluginContractTestCase::inspectAll(
+            new PctcExplodingSubject(PctcFixturePlugin::class, ['requirementRoot' => '/srv/fleet-fixture'])
+        );
+
+        $ledger = PluginContractTestCase::overrideLedger();
+        $this->assertCount(count(InspectorRegistry::ids()), $ledger);
+        foreach ($ledger as $entry) {
+            $this->assertSame('harness-bug', $entry['outcome']);
         }
     }
 
@@ -788,6 +1357,29 @@ class PctcInspectorSkipsAndFails extends PctcFixtureInspector
     }
 }
 
+class PctcInspectorNoticesAndFails extends PctcFixtureInspector
+{
+    /**
+     * @return string
+     */
+    public function id()
+    {
+        return 'F-5b';
+    }
+
+    /**
+     * @param PluginSubject $subject
+     * @return array<int,Finding>
+     */
+    public function inspect(PluginSubject $subject)
+    {
+        return [
+            Finding::notice($this->id(), 'fixture observation beside a failure'),
+            Finding::failure($this->id(), 'fixture violation beside a notice'),
+        ];
+    }
+}
+
 class PctcInspectorSkipsAndNotices extends PctcFixtureInspector
 {
     /**
@@ -864,6 +1456,26 @@ class PctcInspectorNeedsPrimedConstants extends PctcFixtureInspector
         }
 
         return [];
+    }
+}
+
+/**
+ * A subject declaring a hatch that {@see PluginSubject} does not ship.
+ *
+ * Stands in for the future, which is the only place the "hatch this class cannot read" arm
+ * can be reached from: the four real hatches are all readable, so with the shipped subject
+ * that arm is dead code and no test can tell a correct implementation from one that logs a
+ * bare null instead. Overriding the public `overridesInUse()` is how the fifth hatch is
+ * simulated without touching production.
+ */
+class PctcSubjectWithAnExtraHatch extends PluginSubject
+{
+    /**
+     * @return array<int,string>
+     */
+    public function overridesInUse()
+    {
+        return array_merge(parent::overridesInUse(), ['pctcFutureHatch']);
     }
 }
 

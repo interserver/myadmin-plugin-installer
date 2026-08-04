@@ -60,7 +60,13 @@ use Throwable;
  * that have nothing to do with the change under test. This inspector therefore never uses a
  * relative root. {@see requirementRootFor()} resolves one absolutely, in this order:
  *
- *  1. `PluginSubject::requirementRoot()` when the repo set one — the explicit answer wins.
+ *  1. `PluginSubject::requirementRoot()` when the repo set one — the explicit answer wins,
+ *     **provided it is a directory**. It is not taken on trust: an explicit root that does
+ *     not exist manufactures a dangling-path failure for every registered source, and one
+ *     that happens to contain files hides the real ones. Both were reproduced in review.
+ *     A bad explicit root is reported as a skip naming the root ({@see unusableExplicitRoot()})
+ *     and does *not* fall through to the rungs below — silently substituting a directory the
+ *     repo never named would be a third wrong answer.
  *  2. The `INCLUDE_ROOT` constant, **if it is defined and absolute**. This is what core uses,
  *     so honouring it means the check agrees with the running application. A *relative*
  *     `INCLUDE_ROOT` is rejected rather than used, because adopting it would import the very
@@ -142,6 +148,16 @@ class TierB10RequirementPathsResolve implements PluginInspector
             )];
         }
 
+        // Checked before the handler is resolved, and before any path is examined, because a
+        // root that is not a directory makes every subsequent verdict meaningless in one
+        // direction or the other — see unusableExplicitRoot(). Reporting it here also means a
+        // repo whose hatch is wrong and whose plugin registers nothing hears about the hatch,
+        // instead of passing vacuously and finding out years later.
+        $badRoot = $this->unusableExplicitRoot($subject);
+        if ($badRoot !== null) {
+            return [$badRoot];
+        }
+
         $target = $this->resolveHandler($subject);
         if ($target instanceof Finding) {
             return [$target];
@@ -179,6 +195,11 @@ class TierB10RequirementPathsResolve implements PluginInspector
     /**
      * The absolute directory registered sources resolve under, or null when none can be had.
      *
+     * Null covers two distinguishable situations, and {@see inspect()} distinguishes them
+     * before calling this: no root could be derived at all, or the repo named one that is not
+     * a directory. Callers that only need a path can ignore the difference; a caller that
+     * reports to a human must not.
+     *
      * Public because it is the part of this check most likely to be argued with, and an
      * argument you can call is better than one you have to reconstruct from a failure
      * message. The ordering is documented on the class.
@@ -190,7 +211,11 @@ class TierB10RequirementPathsResolve implements PluginInspector
     {
         $explicit = $subject->requirementRoot();
         if (is_string($explicit) && $explicit !== '') {
-            return $this->normalizeRoot($explicit);
+            // Same `is_dir()` gate rungs 3 and 4 apply, for the same reason: a root that is
+            // not a directory cannot produce an honest verdict. Rung 1 does NOT fall through
+            // to the later rungs when it fails — an explicit answer that is wrong must be
+            // reported, not quietly replaced with a different directory the repo never named.
+            return is_dir($explicit) ? $this->normalizeRoot($explicit) : null;
         }
 
         if (defined('INCLUDE_ROOT')) {
@@ -210,6 +235,56 @@ class TierB10RequirementPathsResolve implements PluginInspector
         }
 
         return null;
+    }
+
+    /**
+     * A skip naming the repo's own `requirementRoot()` when it is not a usable directory,
+     * or null when the hatch is unset or fine.
+     *
+     * ---------------------------------------------------------------------------------
+     * WHY THIS IS A SKIP AND NOT A PILE OF FAILURES
+     * ---------------------------------------------------------------------------------
+     * Rungs 3 and 4 of the root ladder have always been `is_dir()`-gated; rung 1 — the
+     * explicit hatch — was not. That asymmetry made both misuse directions silent, and both
+     * were reproduced in review:
+     *
+     *  - point the hatch at a directory that does not exist, and **every** registered source
+     *    resolves under it to a file that is not there. The plugin gets a wall of
+     *    dangling-path failures indistinguishable from the real ones this check exists to
+     *    find — 15 fleet packages have genuine ones, so the noise lands on top of signal.
+     *  - point it somewhere files happen to exist, and real dangling paths resolve to
+     *    something and the check goes green.
+     *
+     * Neither verdict is about the plugin, so neither may be reported as one. A skip naming
+     * the root says so, is visible in the matrix, and cannot be mistaken for compliance.
+     *
+     * @param PluginSubject $subject
+     * @return Finding|null
+     */
+    private function unusableExplicitRoot(PluginSubject $subject)
+    {
+        $explicit = $subject->requirementRoot();
+        // A null here is either "never overridden" or the explicit opt-out, and the opt-out
+        // has already returned by this point.
+        if ($explicit === null || is_dir((string)$explicit)) {
+            return null;
+        }
+
+        return Finding::skipped(
+            self::ID,
+            'requirementRoot() names "'.$explicit.'", which is not a directory on this machine, so'
+                .' no source path can be resolved honestly: every registered path would resolve'
+                .' under a root that holds nothing and be reported as dangling, whether or not it'
+                .' really is. Point requirementRoot() at the directory core uses as INCLUDE_ROOT'
+                .' (the install\'s include/ directory), delete the override to let B-10 derive that'
+                .' directory itself, or return null from it to opt this repo out of the check'
+                .' deliberately.',
+            [
+                'plugin' => $subject->pluginClass(),
+                'override' => 'requirementRoot',
+                'requirementRoot' => $explicit,
+            ]
+        );
     }
 
     /**

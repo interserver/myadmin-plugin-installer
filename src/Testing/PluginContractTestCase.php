@@ -48,17 +48,70 @@ use Throwable;
  * in a triage swamp.
  *
  * ---------------------------------------------------------------------------------
- * ESCAPE HATCHES
+ * ESCAPE HATCHES, AND WHY DISCLOSURE CANNOT LIVE ONLY ON THE FAILURE PATH
  * ---------------------------------------------------------------------------------
  * The override hooks below exist so a repo with a legitimate deviation does not have to
  * weaken a shared assertion for everyone. Gate G2 requires that every hatch in use is
- * reviewable, so every failure message lists the overrides that were active
- * ({@see PluginSubject::overridesInUse()}). A hatch used to silence a real defect is
- * then visible in the failure output itself, not buried in a subclass nobody reads.
+ * *reviewable*, and states it as "each is logged when used".
+ *
+ * An earlier revision disclosed them from {@see describeOverrides()} at exactly one call
+ * site: `$this->fail()`. That log therefore fired precisely when the hatch had **failed** to
+ * hide anything. The case worth auditing is the opposite one — a hatch that successfully
+ * silences a real defect — and it produced a green run and no record at all. Disclosure now
+ * happens on every outcome:
+ *
+ *  - **failure** and **harness bug** — named in the message, as before.
+ *  - **skip** — named in the `markTestSkipped()` message.
+ *  - **incomplete** (a notice was reported) — named in that message.
+ *  - **pass** — recorded in {@see overrideLedger()}. There is no PHPUnit channel for
+ *    "green, but say something", and turning every hatched repo yellow would push repos
+ *    away from the documented hatches and back towards locally weakening shared assertions,
+ *    which is the outcome this whole mechanism exists to prevent. So the passing path logs
+ *    rather than shouts.
+ *
+ * The ledger is deliberately **structured**, not a formatted string: the fleet matrix
+ * generator has to aggregate hatch use across 69 repos, and a generator that recovers its
+ * data by scraping human-readable failure text breaks the first time a message is reworded.
+ * Entries hold the plugin, the source, the assertion, the outcome, and the override values.
+ * Only runs with at least one active hatch are recorded — "logged when used" means the
+ * ledger is the hatch record, not a 1173-row transcript of the fleet.
  *
  * The sentinel matters: returning `null` from {@see requirementRoot()} is a deliberate,
  * logged opt-out of the B-10 path check, which is NOT the same as never having
  * overridden it. {@see NOT_SET} keeps those two apart.
+ *
+ * ---------------------------------------------------------------------------------
+ * HOW A NOTICE RENDERS
+ * ---------------------------------------------------------------------------------
+ * {@see Finding::NOTICE} means "the inspector ran and observed something that is not a
+ * contract violation". It used to be collected by nobody here, so an inspector returning
+ * one notice and nothing else produced a green run identical to one that found nothing.
+ *
+ * A run with any notice is now reported as PHPUnit **incomplete**. That bucket was chosen
+ * over the alternatives on purpose:
+ *
+ *  - *pass* is what was wrong; a green cell must not hide an observation.
+ *  - *skipped* would be a false statement — emitting a notice proves the check ran — and
+ *    understating coverage is still misreporting it.
+ *  - *warning* and *risky* both fail the build under the `failOnWarning="true"` /
+ *    `failOnRisky="true"` settings every fleet `phpunit.xml.dist` carries, and a notice must
+ *    never fail a build.
+ *  - printing is not available at all: `beStrictAboutOutputDuringTests="true"` turns output
+ *    from a test into a risky failure.
+ *
+ * Incomplete is the only remaining bucket that is visible in the default report, distinct
+ * from pass, fail and skip, and non-fatal.
+ *
+ * The contract assertion is recorded *before* the test is marked incomplete. PHPUnit 9
+ * routes an incomplete test through the same branch of `TestResult::run()` that suppresses
+ * the "did not perform any assertions" check, so today that ordering is belt-and-braces
+ * against `failOnRisky="true"` rather than load-bearing. It is kept, and pinned by
+ * `PluginContractTestCaseTest::testTheContractAssertionIsRecordedEvenWhenTheRunIsIncomplete`,
+ * for the property that does matter: an incomplete run carries exactly the same recorded
+ * assertion a green one does, so "this cell was checked" stays true of it.
+ *
+ * This changes only the PHPUnit bucket. The fleet matrix keeps deriving its cell as
+ * `fail > skip > pass`, so no notice moves a cell's colour.
  *
  * ---------------------------------------------------------------------------------
  * PRIMING IS IRREVERSIBLE — WHAT THAT COSTS A REPO
@@ -83,6 +136,34 @@ abstract class PluginContractTestCase extends TestCase
      * stays distinguishable from a default.
      */
     const NOT_SET = '__myadmin_plugin_contract_not_set__';
+
+    /**
+     * Recorded as an override's value when {@see PluginSubject} grew a hatch that
+     * {@see overrideValues()} has not been taught to read.
+     *
+     * The *name* is still logged, because G2 asks for the hatch to be visible and a name is
+     * enough for that. The sentinel keeps the gap honest instead of logging a plausible
+     * `null`. `PluginContractTestCaseTest::testEveryDeclaredHatchHasAReadableValue()` fails
+     * the moment this would be emitted.
+     */
+    const OVERRIDE_VALUE_UNKNOWN = '__myadmin_plugin_contract_override_value_unknown__';
+
+    /** A ledger entry written by a repo's own PHPUnit run. */
+    const SOURCE_PHPUNIT = 'phpunit';
+
+    /** A ledger entry written by the fleet sweep, {@see inspectAll()}. */
+    const SOURCE_FLEET = 'fleet';
+
+    /**
+     * Every run that had at least one escape hatch active — the G2 hatch record.
+     *
+     * Static because it has to survive across the seventeen independent PHPUnit test
+     * instances of one repo's run, and across the sixty-nine {@see inspectAll()} calls of a
+     * fleet sweep, neither of which shares an object.
+     *
+     * @var array<int,array<string,mixed>>
+     */
+    private static $overrideLedger = [];
 
     /**
      * Fully-qualified plugin class under test.
@@ -209,6 +290,7 @@ abstract class PluginContractTestCase extends TestCase
         try {
             $findings = $inspector->inspect($subject);
         } catch (Throwable $e) {
+            self::recordOverrideUse($subject, self::SOURCE_PHPUNIT, $inspector->id(), 'harness-bug');
             $this->fail(
                 'HARNESS BUG (H-bug), not a plugin defect: inspector '.$inspector->id().' threw '
                 .get_class($e).' — "'.$e->getMessage().'". '
@@ -220,13 +302,21 @@ abstract class PluginContractTestCase extends TestCase
 
         $failures = [];
         $skips = [];
+        $notices = [];
         foreach ($findings as $finding) {
             if ($finding->isFailure()) {
                 $failures[] = $finding->describe();
             } elseif ($finding->isSkipped()) {
                 $skips[] = $finding->describe();
+            } elseif ($finding->isNotice()) {
+                $notices[] = $finding->describe();
             }
         }
+
+        // Recorded before any branch below returns or throws, so the hatch record is
+        // complete on the paths that produce no visible message at all — which are exactly
+        // the ones a hatch abuse hides behind.
+        self::recordOverrideUse($subject, self::SOURCE_PHPUNIT, $inspector->id(), self::outcomeOf($findings));
 
         if ($failures !== []) {
             $this->fail(
@@ -253,16 +343,49 @@ abstract class PluginContractTestCase extends TestCase
         //   - Nothing is actually lost. The fleet triage matrix derives each cell straight
         //     from the findings with fail > skip > pass, so a skip is rendered as a skip in
         //     the G2 artefact whatever this method decides. Only the PHPUnit bucket differs.
+        //     The notice now carries the skip into the incomplete message below, so the
+        //     PHPUnit reader does not lose it either.
         // Pinned by PluginContractTestCaseTest::testASkipAlongsideANoticeDoesNotSkipTheTest.
         if ($skips !== [] && count($skips) === count($findings)) {
             $this->markTestSkipped(
                 $inspector->id().' could not run against '.$subject->pluginClass().': '
                 .implode('; ', $skips)
+                ."\n".$this->describeOverrides($subject)
             );
             return;
         }
 
+        // Recorded before markTestIncomplete() below, never after, so an incomplete run
+        // carries the same recorded assertion a green one does — "this cell was checked"
+        // has to stay true of it. See the class docblock for why that is not merely tidiness.
         $this->assertSame([], $failures, $inspector->id().' reported no contract violations');
+
+        if ($notices !== []) {
+            $this->markTestIncomplete($this->describeNotices($inspector, $subject, $notices, $skips));
+        }
+    }
+
+    /**
+     * The incomplete-run message: what was observed, what could not run, and why this is
+     * not a failure.
+     *
+     * @param \MyAdmin\Plugins\Testing\Contract\PluginInspector $inspector
+     * @param \MyAdmin\Plugins\Testing\Contract\PluginSubject   $subject
+     * @param array<int,string>                                 $notices
+     * @param array<int,string>                                 $skips
+     * @return string
+     */
+    protected function describeNotices($inspector, PluginSubject $subject, array $notices, array $skips)
+    {
+        $message = $inspector->id().' — '.$inspector->title()."\n"
+            .$subject->pluginClass().' satisfies this assertion. Reported as incomplete rather than'
+            ." passed so these observations are not lost in a green run — none of them is a contract"
+            ." violation and none of them fails the build:\n  - "
+            .implode("\n  - ", $notices)."\n";
+        if ($skips !== []) {
+            $message .= "Part of the check could not run:\n  - ".implode("\n  - ", $skips)."\n";
+        }
+        return $message.$this->describeOverrides($subject);
     }
 
     /**
@@ -287,8 +410,14 @@ abstract class PluginContractTestCase extends TestCase
     }
 
     /**
-     * Names the escape hatches in play, so a failure message shows whether the result was
-     * reached under a relaxed contract.
+     * Names the escape hatches in play **and what they were set to**, so any message shows
+     * whether the result was reached under a relaxed contract.
+     *
+     * The values are not decoration. The B-10 abuse case is entirely about *which* directory
+     * `requirementRoot()` names — one value manufactures dangling-path failures for every
+     * registered path, another silences real ones — and "requirementRoot is in effect" tells
+     * a maintainer nothing they can act on. A reader who has never seen the plan has to be
+     * able to judge the hatch from the message alone.
      *
      * @param \MyAdmin\Plugins\Testing\Contract\PluginSubject $subject
      * @return string
@@ -299,7 +428,175 @@ abstract class PluginContractTestCase extends TestCase
         if ($used === []) {
             return 'No per-repo overrides are in effect.';
         }
-        return 'Per-repo overrides in effect (review under gate G2): '.implode(', ', $used).'.';
+        $values = self::overrideValues($subject);
+        $pairs = [];
+        foreach ($used as $name) {
+            $rendered = self::renderOverrideValue($values[$name]);
+            // A null root is not "no root": it is the one hatch that removes an assertion
+            // outright, and the reader has to be told which one without going and reading
+            // PluginSubject::skipsRequirementCheck().
+            if ($name === 'requirementRoot' && $subject->skipsRequirementCheck()) {
+                $rendered .= ' (opts out of the B-10 requirement-path check)';
+            }
+            $pairs[] = $name.'='.$rendered;
+        }
+        return 'Per-repo overrides in effect (review under gate G2): '.implode(', ', $pairs).'.';
+    }
+
+    /**
+     * Each active hatch's name mapped to the value the subject actually holds.
+     *
+     * Read through {@see PluginSubject}'s public accessors rather than from the subclass
+     * hooks, so the ledger records what the inspectors were handed — not what the repo meant
+     * to hand them. Those two differ whenever a hatch fails to reach the subject, and that
+     * difference is the one worth catching.
+     *
+     * @param \MyAdmin\Plugins\Testing\Contract\PluginSubject $subject
+     * @return array<string,mixed>
+     */
+    protected static function overrideValues(PluginSubject $subject)
+    {
+        $values = [];
+        foreach ($subject->overridesInUse() as $name) {
+            if ($name === 'expectedType') {
+                $values[$name] = $subject->expectedType();
+            } elseif ($name === 'requirementRoot') {
+                $values[$name] = $subject->requirementRoot();
+            } elseif ($name === 'serviceDefines') {
+                $values[$name] = $subject->serviceDefines();
+            } elseif ($name === 'constantOverrides') {
+                $values[$name] = $subject->constantOverrides();
+            } else {
+                $values[$name] = self::OVERRIDE_VALUE_UNKNOWN;
+            }
+        }
+        return $values;
+    }
+
+    /**
+     * One override value as a short, readable string.
+     *
+     * Arrays are rendered one level deep — `serviceDefines` and `constantOverrides` are flat
+     * name/value maps, and printing `array` for them would lose the only part a reviewer
+     * cares about.
+     *
+     * @param mixed $value
+     * @return string
+     */
+    private static function renderOverrideValue($value)
+    {
+        if ($value === self::OVERRIDE_VALUE_UNKNOWN) {
+            return '(value not exposed to the override log)';
+        }
+        if ($value === null) {
+            return 'null';
+        }
+        if (is_scalar($value)) {
+            return var_export($value, true);
+        }
+        if (!is_array($value)) {
+            return gettype($value);
+        }
+        if ($value === []) {
+            return '[]';
+        }
+        $pairs = [];
+        foreach ($value as $key => $item) {
+            $pairs[] = $key.'='.(is_scalar($item) || $item === null ? var_export($item, true) : gettype($item));
+        }
+        return '['.implode(', ', $pairs).']';
+    }
+
+    /**
+     * Every recorded use of an escape hatch, oldest first.
+     *
+     * This is the G2 hatch record, and the reason it is an array of arrays rather than a
+     * block of text: the fleet matrix generator has to group hatch use by package and by
+     * assertion, and a generator that parsed it out of a failure message would break on the
+     * next reword. Each entry holds:
+     *
+     *  - `plugin`    — the class under inspection;
+     *  - `source`    — {@see SOURCE_PHPUNIT} for a repo's own run, {@see SOURCE_FLEET} for
+     *                  {@see inspectAll()};
+     *  - `assertion` — the catalogue id whose run this was;
+     *  - `outcome`   — `pass`, `notice`, `skip`, `fail` or `harness-bug`. `pass` alongside a
+     *                  hatch is the entry a G2 reviewer is looking for: a green cell reached
+     *                  under a relaxed contract;
+     *  - `overrides` — hatch name to the value the subject held.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public static function overrideLedger()
+    {
+        return self::$overrideLedger;
+    }
+
+    /**
+     * Empties the hatch record.
+     *
+     * For a fleet sweep that wants one package's entries at a time, and for tests. A repo's
+     * own PHPUnit run never needs it.
+     *
+     * @return void
+     */
+    public static function clearOverrideLedger()
+    {
+        self::$overrideLedger = [];
+    }
+
+    /**
+     * Appends one entry, if and only if a hatch was actually in use.
+     *
+     * @param \MyAdmin\Plugins\Testing\Contract\PluginSubject $subject
+     * @param string                                          $source
+     * @param string                                          $assertion
+     * @param string                                          $outcome
+     * @return void
+     */
+    protected static function recordOverrideUse(PluginSubject $subject, $source, $assertion, $outcome)
+    {
+        $overrides = self::overrideValues($subject);
+        if ($overrides === []) {
+            return;
+        }
+        self::$overrideLedger[] = [
+            'plugin' => $subject->pluginClass(),
+            'source' => (string)$source,
+            'assertion' => (string)$assertion,
+            'outcome' => (string)$outcome,
+            'overrides' => $overrides,
+        ];
+    }
+
+    /**
+     * The verdict a set of findings produces, in the same precedence the test body uses.
+     *
+     * Shared so the ledger cannot drift from the PHPUnit bucket it claims to describe.
+     * Note this is **not** the matrix cell rule: the matrix collapses `notice` into `pass`
+     * and reports `[skip, notice]` as a skip, deliberately, because a cell has three colours
+     * and a PHPUnit run has four outcomes.
+     *
+     * @param array<int,\MyAdmin\Plugins\Testing\Contract\Finding> $findings
+     * @return string
+     */
+    protected static function outcomeOf(array $findings)
+    {
+        $skips = 0;
+        $notices = 0;
+        foreach ($findings as $finding) {
+            if ($finding->isFailure()) {
+                return 'fail';
+            }
+            if ($finding->isSkipped()) {
+                $skips++;
+            } elseif ($finding->isNotice()) {
+                $notices++;
+            }
+        }
+        if ($skips > 0 && $skips === count($findings)) {
+            return 'skip';
+        }
+        return $notices > 0 ? 'notice' : 'pass';
     }
 
     /**
@@ -310,6 +607,16 @@ abstract class PluginContractTestCase extends TestCase
      * matrix were built by re-implementing the loop above, the two could disagree, and the
      * matrix is the artefact gate G2 is reviewed against.
      *
+     * Also writes the G2 hatch record for this subject into {@see overrideLedger()} — one
+     * entry per assertion, and only when a hatch is actually in use. Gate G2 asks for every
+     * escape hatch to be logged when used, and this is the path that produces the artefact
+     * the gate is reviewed against; before it recorded anything, the fleet sweep was
+     * structurally incapable of satisfying the requirement it was meant to evidence.
+     *
+     * The keys of the returned array stay exactly the catalogue ids. The hatch record is a
+     * separate channel on purpose: an extra row here would become an extra matrix cell and
+     * quietly change the 17 x 69 census the gate is read against.
+     *
      * @param \MyAdmin\Plugins\Testing\Contract\PluginSubject $subject
      * @return array<string,array<int,\MyAdmin\Plugins\Testing\Contract\Finding>>
      */
@@ -317,6 +624,7 @@ abstract class PluginContractTestCase extends TestCase
     {
         $rows = [];
         foreach (InspectorRegistry::all() as $inspector) {
+            $outcome = null;
             try {
                 // Primed inside the per-inspector try, not once before the loop: Bootstrap::init()
                 // throwing outside this catch would abort the whole 69-plugin matrix and pin the
@@ -329,6 +637,7 @@ abstract class PluginContractTestCase extends TestCase
                         : ['constants' => $subject->constantOverrides()]
                 ));
                 $rows[$inspector->id()] = $inspector->inspect($subject);
+                $outcome = self::outcomeOf($rows[$inspector->id()]);
             } catch (Throwable $e) {
                 $rows[$inspector->id()] = [
                     Finding::failure(
@@ -337,7 +646,9 @@ abstract class PluginContractTestCase extends TestCase
                         ['harnessBug' => true, 'exception' => get_class($e)]
                     ),
                 ];
+                $outcome = 'harness-bug';
             }
+            self::recordOverrideUse($subject, self::SOURCE_FLEET, $inspector->id(), $outcome);
         }
         return $rows;
     }

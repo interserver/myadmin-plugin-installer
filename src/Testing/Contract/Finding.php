@@ -26,16 +26,45 @@ namespace MyAdmin\Plugins\Testing\Contract;
  * *return* what they observed and let the caller decide whether to throw. The same code
  * backs both consumers, so the matrix cannot drift from what the test case enforces.
  *
- * Severity is deliberately coarse. `NOTICE` exists for exactly one documented case in the
- * catalogue — Tier-B-14's "template present but unreachable" direction, which is
- * informational rather than a defect — so that reporting it never fails a build.
+ * ---------------------------------------------------------------------------------
+ * WHAT `NOTICE` IS, AND WHERE IT SURFACES
+ * ---------------------------------------------------------------------------------
+ * `NOTICE` is the severity for *"the inspector ran, observed something worth saying, and it
+ * is not a contract violation."* Two inspectors emit one today:
+ *
+ *  - Tier-B-11, for route methods given as the bare string `'GET'` rather than `['GET']`.
+ *    FastRoute casts it and core's own router uses that form, so failing it would invent a
+ *    rule the router does not have.
+ *  - Tier-B-14, for a `*.sh.tpl` that is present but that no literal queue action selects.
+ *
+ * An earlier revision of this docblock claimed a single call site and claimed notices were
+ * "reported". Both were false: there were two call sites, and no consumer looked at the
+ * severity at all — a lone notice produced a green PHPUnit run indistinguishable from an
+ * inspector that found nothing. That mattered beyond tidiness, because the vocabulary is
+ * where an inspector puts *"I saw a problem but another inspector owns the verdict"*: routed
+ * through a severity nobody reads, that observation becomes silence, which is strictly worse
+ * than the false failure it was meant to replace.
+ *
+ * Both consumers now read it:
+ *
+ *  - {@see \MyAdmin\Plugins\Testing\PluginContractTestCase} renders a run whose findings
+ *    include a notice as PHPUnit **incomplete** — visible in the default report, its own
+ *    outcome bucket, and not a failure. Incomplete rather than skipped because the check did
+ *    run; incomplete rather than passed because a green cell must not hide an observation.
+ *  - The fleet matrix keeps deriving its cell as `fail > skip > pass`, so a notice never
+ *    changes a cell's colour; it is carried alongside as an annotation.
+ *
+ * Severity stays deliberately coarse: three values, each with one consumer-visible meaning.
  */
 class Finding
 {
     /** A contract violation. Fails the test and the matrix cell. */
     const FAILURE = 'failure';
 
-    /** Informational. Reported, never fails. */
+    /**
+     * An observation that is not a violation. Never fails a build; never silent either —
+     * see the class docblock for where it surfaces.
+     */
     const NOTICE = 'notice';
 
     /**
@@ -153,6 +182,20 @@ class Finding
     public function isSkipped()
     {
         return $this->severity === self::SKIPPED;
+    }
+
+    /**
+     * Companion to {@see isFailure()} and {@see isSkipped()}.
+     *
+     * Its absence is why notices went unreported: every consumer asked "failure?" then
+     * "skipped?" and treated the remaining case as nothing at all. A predicate per severity
+     * makes the third case as easy to handle as the other two.
+     *
+     * @return bool
+     */
+    public function isNotice()
+    {
+        return $this->severity === self::NOTICE;
     }
 
     /**

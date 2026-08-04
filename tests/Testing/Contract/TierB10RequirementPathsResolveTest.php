@@ -547,6 +547,136 @@ class TierB10RequirementPathsResolveTest extends TestCase
     }
 
     /**
+     * Misuse direction one, reproduced in review: a `requirementRoot()` naming a directory
+     * that does not exist made **every** registered source resolve to a file that is not
+     * there, so the plugin was reported as riddled with dangling paths. Those failures are
+     * indistinguishable from the fifteen fleet packages that really do have them, which is
+     * what makes the mode expensive rather than merely wrong.
+     *
+     * The verdict has to be a skip naming the root: not a failure (nothing was learned about
+     * the plugin), not a silent pass (the repo has a broken hatch and must hear about it).
+     *
+     * @return void
+     */
+    public function testExplicitRootThatIsNotADirectoryIsSkippedNamingTheRoot()
+    {
+        $absent = $this->makeBase().'/there-is-no-such-directory';
+        $this->assertDirectoryDoesNotExist($absent, 'the fixture is only meaningful if the root is absent');
+
+        TierB10Registry::$sources = [
+            'one' => '/src/a.php',
+            'two' => '/src/b.php',
+            'three' => '/src/c.php',
+        ];
+        $findings = $this->inspect(TierB10RegistryPlugin::class, $absent);
+
+        $this->assertCount(1, $findings, 'a broken root must not be multiplied by the number of paths');
+        $this->assertTrue($findings[0]->isSkipped());
+        $this->assertFalse($findings[0]->isFailure(), 'a bad root must never manufacture a plugin defect');
+        $this->assertStringContainsString($absent, $findings[0]->message(), 'the bad root must be named');
+        $this->assertStringContainsString('requirementRoot()', $findings[0]->message());
+        $this->assertStringContainsString('not a directory', $findings[0]->message());
+        $this->assertSame('requirementRoot', $findings[0]->context()['override']);
+        $this->assertSame($absent, $findings[0]->context()['requirementRoot']);
+    }
+
+    /**
+     * Misuse direction two: a root that *is* a directory and happens to contain the file
+     * turns a real dangling path green. B-10 cannot tell that root from a correct one — that
+     * is the point of {@see \MyAdmin\Plugins\Testing\PluginContractTestCase::overrideLedger()}
+     * — but the `is_dir()` gate must not be mistaken for a defence against it, and the
+     * check must keep failing honestly whenever the root is real. This is the guard on the
+     * fifteen fleet failures: the gate must silence none of them.
+     *
+     * @return void
+     */
+    public function testAGateThatRejectsBadRootsStillFailsDanglingPathsUnderARealRoot()
+    {
+        $silencing = $this->makeRoot(['/src/dangling.php']);
+        $honest = $this->makeRoot();
+
+        TierB10Registry::$sources = ['thing' => '/src/dangling.php'];
+
+        $this->assertSame(
+            [],
+            $this->inspect(TierB10RegistryPlugin::class, $silencing),
+            'a root that contains the file is green — the is_dir() gate cannot detect this'
+        );
+
+        $findings = $this->inspect(TierB10RegistryPlugin::class, $honest);
+        $this->assertCount(1, $findings);
+        $this->assertTrue($findings[0]->isFailure(), 'a real root must still report a real dangling path');
+        $this->assertStringContainsString('dangling.php', $findings[0]->message());
+    }
+
+    /**
+     * `''` is a string and is not a directory. It reached the same wrong place as a
+     * nonexistent path — `''.'/'.$source` resolves against the filesystem root — so it takes
+     * the same exit.
+     *
+     * @return void
+     */
+    public function testEmptyExplicitRootIsSkippedRatherThanResolvedAgainstTheFilesystemRoot()
+    {
+        TierB10Registry::$sources = ['thing' => '/etc/hostname'];
+        $findings = $this->inspect(TierB10RegistryPlugin::class, '');
+
+        $this->assertCount(1, $findings);
+        $this->assertTrue($findings[0]->isSkipped());
+        $this->assertSame('', $findings[0]->context()['requirementRoot']);
+    }
+
+    /**
+     * A repo with a broken hatch and a plugin that registers nothing used to pass vacuously:
+     * the root was never consulted, so nothing said the hatch was wrong. The misconfiguration
+     * outlives that silence — it is waiting for the first requirement the repo ever adds.
+     *
+     * @return void
+     */
+    public function testBadExplicitRootIsReportedEvenWhenThePluginRegistersNoRequirements()
+    {
+        $absent = $this->makeBase().'/not-a-directory-either';
+        $findings = $this->inspect(TierB10NoRequirementsPlugin::class, $absent);
+
+        $this->assertCount(1, $findings);
+        $this->assertTrue($findings[0]->isSkipped());
+        $this->assertStringContainsString($absent, $findings[0]->message());
+    }
+
+    /**
+     * The explicit rung does not fall through. Substituting a derived root for the one the
+     * repo named would produce a verdict about a directory nobody asked for — a third wrong
+     * answer, and the hardest of the three to notice.
+     *
+     * @return void
+     */
+    public function testBadExplicitRootDoesNotFallThroughToADerivedRoot()
+    {
+        $core = $this->makeBase();
+        mkdir($core.'/include', 0777, true);
+        $packageSrc = $core.'/vendor/acme/hatched/src';
+        mkdir($packageSrc, 0777, true);
+
+        $file = $packageSrc.'/TierB10FallThroughPlugin.php';
+        file_put_contents(
+            $file,
+            "<?php\nnamespace Tests\\MyAdmin\\Plugins\\Testing\\Contract\\FallThroughB10;\n"
+                ."class TierB10FallThroughPlugin\n{\n}\n"
+        );
+        require_once $file;
+
+        $class = 'Tests\MyAdmin\Plugins\Testing\Contract\FallThroughB10\TierB10FallThroughPlugin';
+        $derived = $this->inspector->requirementRootFor(new PluginSubject($class));
+        $this->assertSame($core.'/include', $derived, 'the fixture must have a derivable root to fall through to');
+
+        $absent = $this->makeBase().'/still-not-a-directory';
+        $this->assertNull(
+            $this->inspector->requirementRootFor(new PluginSubject($class, ['requirementRoot' => $absent])),
+            'a bad explicit root must resolve to nothing, not to the derived root'
+        );
+    }
+
+    /**
      * An *unset* root is not an opt-out: it falls back, and the check still runs.
      *
      * @return void

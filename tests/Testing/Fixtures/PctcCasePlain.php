@@ -53,4 +53,41 @@ class PctcCasePlain extends PluginContractTestCase
     {
         return $this->describeOverrides($this->contractSubject());
     }
+
+    /**
+     * @param \MyAdmin\Plugins\Testing\Contract\PluginSubject $subject
+     * @return array<string,mixed>
+     */
+    public static function overrideValuesForTest(\MyAdmin\Plugins\Testing\Contract\PluginSubject $subject)
+    {
+        return self::overrideValues($subject);
+    }
+
+    /**
+     * {@see describeOverridesForTest()} for a subject this case does not build itself — the
+     * only way to exercise a hatch the shipped {@see PluginSubject} does not yet declare.
+     *
+     * @param \MyAdmin\Plugins\Testing\Contract\PluginSubject $subject
+     * @return string
+     */
+    public function describeOverridesForSubject(\MyAdmin\Plugins\Testing\Contract\PluginSubject $subject)
+    {
+        return $this->describeOverrides($subject);
+    }
+
+    /**
+     * @param \MyAdmin\Plugins\Testing\Contract\PluginSubject $subject
+     * @param string                                          $source
+     * @param string                                          $assertion
+     * @param string                                          $outcome
+     * @return void
+     */
+    public static function recordOverrideUseForTest(
+        \MyAdmin\Plugins\Testing\Contract\PluginSubject $subject,
+        $source,
+        $assertion,
+        $outcome
+    ) {
+        self::recordOverrideUse($subject, $source, $assertion, $outcome);
+    }
 }
