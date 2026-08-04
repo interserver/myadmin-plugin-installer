@@ -11,6 +11,7 @@ namespace Tests\MyAdmin\Plugins\Testing\Contract;
 use MyAdmin\Plugins\Testing\Bootstrap;
 use MyAdmin\Plugins\Testing\Contract\PluginSubject;
 use MyAdmin\Plugins\Testing\Contract\TierB13MenuExecute;
+use MyAdmin\Plugins\Testing\Contract\TierB15NoOutput;
 use MyAdmin\Plugins\Testing\Fakes\FakeApp;
 use MyAdmin\Plugins\Testing\Harness;
 use PHPUnit\Framework\TestCase;
@@ -92,6 +93,27 @@ class TierB13AclBlindPlugin
             throw new \RuntimeException('admin-only menu built without an ACL check');
         }
         $menu->add_link('admin', 'choice=none.b13aclblind', '/images/myadmin/x.png', 'B13 Acl Blind');
+    }
+}
+
+/**
+ * Executes cleanly in all four states and `echo`es in two of them — the client ones, which
+ * B-15 did not visit until R-8. Correct on B-13's assertion, defective on B-15's.
+ */
+class TierB13ClientEchoingPlugin
+{
+    /** @var string */
+    public static $module = 'b13clientecho';
+
+    /**
+     * @param \Tests\MyAdmin\Plugins\Testing\Contract\TierB13Event $event
+     * @return void
+     */
+    public static function getMenu(TierB13Event $event)
+    {
+        if (\MyAdmin\App::ima() !== 'admin') {
+            echo 'b13 client menu leak';
+        }
     }
 }
 
@@ -438,6 +460,63 @@ class TierB13MenuExecuteTest extends TestCase
 
         $this->assertSame('client', FakeApp::ima());
         $this->assertFalse(has_acl('client_billing'));
+    }
+
+    // -----------------------------------------------------------------------
+    // Buffer discipline (R-8) — captured here, reported by B-15
+    // -----------------------------------------------------------------------
+
+    /**
+     * **R-8.** Four invocations of plugin code, none of them buffered until now. A handler
+     * echoing on any one of them printed into the PHPUnit process, and
+     * `beStrictAboutOutputDuringTests="true"` + `failOnRisky="true"` reported it as
+     * `R  This test printed output: …` against B-13 — without naming the plugin, the handler,
+     * or which of the four states produced it.
+     *
+     * The fixture prints only for clients on purpose: that is the half of the cross product
+     * B-15 could not see before R-8, so it is the half where a silent discard would have
+     * lost the defect entirely.
+     *
+     * @return void
+     */
+    public function testAnEchoingHandlerDoesNotEscapeIntoTheTestProcess()
+    {
+        $level = ob_get_level();
+        ob_start();
+
+        $findings = $this->inspector->inspect(new PluginSubject(TierB13ClientEchoingPlugin::class));
+
+        $escaped = ob_get_clean();
+
+        $this->assertSame('', $escaped, 'the inspector must swallow the handler output, not re-emit it');
+        $this->assertSame($level, ob_get_level(), 'and must leave the buffer stack where it found it');
+        $this->assertSame([], $findings, 'the echo is not B-13\'s defect: '.$this->describe($findings));
+    }
+
+    /**
+     * The discard is only honest while B-15 reports what was dropped, and B-15 can only do
+     * that while it executes the same four states this inspector does. Both halves are put to
+     * the test here rather than restated: the fixture is silent in the one state B-15 used to
+     * run, so a B-15 that narrowed back to `ima=admin` + grant-all would leave this red.
+     *
+     * @return void
+     */
+    public function testTheDiscardedOutputIsBackedByAFailureFromB15()
+    {
+        $subject = new PluginSubject(TierB13ClientEchoingPlugin::class);
+
+        $mine = $this->inspector->inspect($subject);
+        $owner = (new TierB15NoOutput())->inspect($subject);
+
+        $this->assertSame([], $mine, $this->describe($mine));
+
+        $this->assertCount(1, $owner, $this->describe($owner));
+        $this->assertTrue(
+            $owner[0]->isFailure(),
+            'B-13 discards the bytes because B-15 reports them — if B-15 is silent they are reported nowhere'
+        );
+        $this->assertSame('B-15', $owner[0]->assertion());
+        $this->assertStringContainsString('b13 client menu leak', $owner[0]->message());
     }
 
     /**

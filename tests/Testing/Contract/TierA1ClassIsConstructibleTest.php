@@ -149,6 +149,67 @@ class TierA1ClassIsConstructibleTest extends TestCase
     }
 
     // -----------------------------------------------------------------------
+    // Buffer discipline (R-8)
+    // -----------------------------------------------------------------------
+
+    /**
+     * A constructor that prints must not print into the surrounding PHPUnit process.
+     *
+     * Left unbuffered, `beStrictAboutOutputDuringTests="true"` + `failOnRisky="true"` fails
+     * *this* test with `R  This test printed output: …` — no plugin name, no hint that the
+     * printing code was the plugin's — which is the report B-15 exists to replace.
+     *
+     * @return void
+     */
+    public function testConstructorOutputIsCapturedRatherThanEscaping()
+    {
+        $level = ob_get_level();
+        ob_start();
+
+        $findings = $this->inspect(TierA1FixtureEchoingConstructor::class);
+
+        $escaped = ob_get_clean();
+
+        $this->assertSame('', $escaped, 'the inspector must swallow the constructor output, not re-emit it');
+        $this->assertSame($level, ob_get_level(), 'and must leave the buffer stack where it found it');
+        $this->assertCount(1, $findings);
+    }
+
+    /**
+     * Captured is not enough — nobody else in the catalogue constructs the plugin, so if A-1
+     * drops the bytes they are reported nowhere. B-15 executes `getSettings()`/`getMenu()`
+     * and never `__construct()`.
+     *
+     * @return void
+     */
+    public function testEchoingConstructorIsReportedAsAFailure()
+    {
+        $finding = $this->soleFailure($this->inspect(TierA1FixtureEchoingConstructor::class));
+
+        $this->assertStringContainsString('a1 constructor leak', $finding->message());
+        $this->assertStringContainsString('add_output()', $finding->message());
+        $this->assertSame('__construct', $finding->context()['site']);
+        $this->assertSame(19, $finding->context()['bytes']);
+    }
+
+    /**
+     * One construction, one finding. Splitting a print-then-throw into two would double-count
+     * a single defect; dropping either half would lose evidence, and the printed bytes are
+     * the half that names the offending line.
+     *
+     * @return void
+     */
+    public function testConstructorThatPrintsAndThenThrowsReportsBothInOneFinding()
+    {
+        $finding = $this->soleFailure($this->inspect(TierA1FixtureEchoThenThrowConstructor::class));
+
+        $this->assertStringContainsString('a1 printed first', $finding->message());
+        $this->assertStringContainsString('a1 then exploded', $finding->message());
+        $this->assertSame('RuntimeException', $finding->context()['exception']);
+        $this->assertSame(16, $finding->context()['bytes']);
+    }
+
+    // -----------------------------------------------------------------------
     // Skip path
     // -----------------------------------------------------------------------
 
@@ -232,5 +293,29 @@ class TierA1FixtureThrowingConstructor
     public function __construct()
     {
         throw new \RuntimeException('tier-a1 fixture explosion');
+    }
+}
+
+/**
+ * A constructor with a leftover debug print. In a real request this runs before the theme
+ * has emitted a byte, so it lands above `<!DOCTYPE html>`.
+ */
+class TierA1FixtureEchoingConstructor
+{
+    public function __construct()
+    {
+        echo 'a1 constructor leak';
+    }
+}
+
+/**
+ * Prints and then fatals — both facts belong in the one report.
+ */
+class TierA1FixtureEchoThenThrowConstructor
+{
+    public function __construct()
+    {
+        echo 'a1 printed first';
+        throw new \RuntimeException('a1 then exploded');
     }
 }

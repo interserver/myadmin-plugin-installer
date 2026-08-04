@@ -11,7 +11,6 @@ namespace MyAdmin\Plugins\Testing\Contract;
 use MyAdmin\Plugins\Testing\Bootstrap;
 use MyAdmin\Plugins\Testing\Harness;
 use ReflectionMethod;
-use Throwable;
 
 /**
  * B-13 — `getMenu()` executes clean under every panel/permission combination.
@@ -46,6 +45,29 @@ use Throwable;
  * One `Finding` is reported per failing combination, naming the combination and the
  * exception, because "getMenu() throws" is a much less useful bug report than
  * "getMenu() throws when ima=client and has_acl() is false".
+ *
+ * ---------------------------------------------------------------------------------
+ * OUTPUT — CAPTURED HERE, REPORTED BY B-15 (R-8)
+ * ---------------------------------------------------------------------------------
+ * Each of the four invocations goes through {@see TierB15NoOutput::capture()}. Unbuffered,
+ * a handler that `echo`es on any one of them escaped into the PHPUnit process, where
+ * `beStrictAboutOutputDuringTests="true"` + `failOnRisky="true"` reported it as
+ * `R  This test printed output: …` against **B-13** — no plugin name, no handler name, no
+ * indication which of the four states produced it, and the reader sent to the harness rather
+ * than to the plugin. {@see TierB15NoOutput} exists to replace exactly that report, so
+ * emitting it from here defeated the point.
+ *
+ * The bytes are **discarded** here rather than reported, and that is only defensible because
+ * B-15 executes `getMenu()` in every state this inspector does. It reads {@see combinations()}
+ * directly to do so, so the two state lists are one list; before R-8 it ran a single
+ * `ima=admin` + grant-all pass, and a handler that printed only for clients would have been
+ * captured here and reported nowhere. Reporting the bytes in this column *as well* would put
+ * one defect in two matrix cells, which is what the deferral in B-15's docblock refuses to do
+ * for throws and refuses symmetrically here.
+ *
+ * `Finding::notice()` is not the compromise it looks like:
+ * {@see \MyAdmin\Plugins\Testing\PluginContractTestCase} reads failures and skips only, so a
+ * notice is dropped by the consumer — swallowed evidence, one layer further down.
  *
  * ---------------------------------------------------------------------------------
  * ORDERING AND ISOLATION
@@ -178,9 +200,12 @@ class TierB13MenuExecute implements PluginInspector
             return $prepared['skip'];
         }
 
-        try {
-            $method->invokeArgs(null, $prepared['args']);
-        } catch (Throwable $e) {
+        $args = $prepared['args'];
+        $run = TierB15NoOutput::capture(function () use ($method, $args) {
+            $method->invokeArgs(null, $args);
+        });
+
+        if ($run['error'] !== null) {
             return Finding::failure(
                 self::ID,
                 sprintf(
@@ -188,8 +213,8 @@ class TierB13MenuExecute implements PluginInspector
                     $subject->pluginClass(),
                     self::METHOD,
                     $combination['label'],
-                    get_class($e),
-                    $e->getMessage()
+                    get_class($run['error']),
+                    $run['error']->getMessage()
                 ),
                 [
                     'class'       => $subject->pluginClass(),
@@ -197,7 +222,7 @@ class TierB13MenuExecute implements PluginInspector
                     'combination' => $combination['label'],
                     'ima'         => $combination['ima'],
                     'acl'         => $combination['grant'] ? 'granted' : 'denied',
-                    'exception'   => get_class($e),
+                    'exception'   => get_class($run['error']),
                 ]
             );
         }

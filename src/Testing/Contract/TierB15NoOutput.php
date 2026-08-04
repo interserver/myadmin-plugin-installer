@@ -59,6 +59,75 @@ use Throwable;
  * one's.
  *
  * ---------------------------------------------------------------------------------
+ * R-8 — ONE BUFFER IMPLEMENTATION FOR THE WHOLE CATALOGUE
+ * ---------------------------------------------------------------------------------
+ * A-1, A-5, B-11, B-12 and B-13 all execute plugin code too, and until R-8 they did it
+ * unbuffered. Under `beStrictAboutOutputDuringTests="true"` + `failOnRisky="true"` one
+ * echoing handler therefore surfaced as `R  This test printed output: …` against whichever
+ * of them happened to run it — the opaque, mis-attributed report this whole inspector was
+ * written to replace, reproduced five times over.
+ *
+ * {@see capture()} is the single implementation they all now call. Copying the drain loop
+ * into five files was rejected for the same reason {@see TierA5HooksAreIdempotent::hookTable()}
+ * exists: five copies of a subtle rule are five things that can drift, and a drift here is
+ * not a wrong verdict, it is a corrupted process. It lives on B-15 because B-15 is the
+ * catalogue entry that owns output.
+ *
+ * ---------------------------------------------------------------------------------
+ * WHO REPORTS THE BYTES — AND WHY SOME CALLERS DISCARD THEM
+ * ---------------------------------------------------------------------------------
+ * Buffering without reporting would only move the swallowing one level down, so every
+ * execution site in the catalogue has exactly one nominated reporter:
+ *
+ *  - `getSettings()` and `getMenu()` — **this inspector**. {@see TierB12SettingsExecute} and
+ *    {@see TierB13MenuExecute} capture and discard, because B-15 executes the same handler,
+ *    on the same subject, in the same states (see below), and reports the bytes as a
+ *    failure in the one column that owns them. Discarding there is what keeps one defect
+ *    in one cell instead of painting it across three.
+ *  - `__construct()` — {@see TierA1ClassIsConstructible}. B-15 never constructs the plugin.
+ *  - `getHooks()` — {@see TierA5HooksAreIdempotent}. B-15 never calls it. A-6, A-7, A-8 and
+ *    B-12 reach it through {@see TierA5HooksAreIdempotent::hookTable()}, which captures and
+ *    discards on the same "the owner runs the identical call" argument; B-11 invokes it
+ *    directly and buffers it the same way.
+ *  - `getRequirements()` — {@see TierB11RoutesWellFormed}. B-15 never calls it either.
+ *
+ * The rule the four cross-references encode: **an inspector may discard only what another
+ * inspector is guaranteed to execute and report.** Where no such inspector exists, the one
+ * doing the executing reports the bytes itself, in its own column, naming this assertion as
+ * the defect class so a reader is not left wondering why A-1 is talking about `echo`.
+ *
+ * **The catalogue is not yet uniform.** {@see TierB9HookTargetsResolve},
+ * {@see TierB9bHookKeysDispatched} and {@see TierB10RequirementPathsResolve} each invoke
+ * `getHooks()` themselves rather than through `hookTable()`, and none of those three
+ * invocations is buffered; B-10 additionally buffers `getRequirements()` but drops the bytes
+ * without naming a reporter. Those four sites are the remainder of R-8 and were outside the
+ * file scope this pass was made under. The fix for each is mechanical: route the call through
+ * `hookTable()`, or wrap it in {@see capture()} and discard on A-5's argument.
+ * `Finding::notice()` is not an option for any of them: {@see \MyAdmin\Plugins\Testing\PluginContractTestCase}
+ * reads only failures and skips, so a notice is discarded by the consumer — swallowing
+ * again, one level further down still.
+ *
+ * ---------------------------------------------------------------------------------
+ * FOUR MENU STATES, BECAUSE THE OWNER MUST NOT SEE LESS THAN THE DISCARDER
+ * ---------------------------------------------------------------------------------
+ * B-12/B-13 may only discard while this inspector observes at least as much as they do.
+ * For `getSettings()` that was already true — both run it once, as `ima=admin` with
+ * `has_acl()` granting everything. For `getMenu()` it was **not**: B-13 runs four
+ * panel/ACL states and this inspector ran one, so a handler echoing only for clients would
+ * have been captured by B-13 and reported by nobody.
+ *
+ * So `getMenu()` is now executed in every state B-13 uses, read straight from
+ * {@see TierB13MenuExecute::combinations()} rather than restated here — a second copy of
+ * that list is a second thing to forget to update, and the whole discard argument rests on
+ * the two lists being identical. `TierB15NoOutputTest::testMenuIsObservedInEveryStateB13Executes`
+ * pins the coupling.
+ *
+ * At most one finding per handler is still returned. Output wins over a throw (the printed
+ * bytes are the actionable half), the first offending state names itself in the message,
+ * and the remaining states are still run — a handler that throws in one state and prints in
+ * another is reported for the print.
+ *
+ * ---------------------------------------------------------------------------------
  * A HANDLER THAT THROWS — THE DEFERRAL, AND WHY IT IS NOW SOUND
  * ---------------------------------------------------------------------------------
  * A handler that throws before finishing was only partly observed, so "it emitted no
@@ -174,7 +243,11 @@ class TierB15NoOutput implements PluginInspector
     // -----------------------------------------------------------------------
 
     /**
-     * Executes one handler under an output buffer.
+     * Executes one handler under an output buffer, in every state its owner executes it in.
+     *
+     * At most one finding comes back per handler; see the class docblock for the precedence
+     * (output beats throw) and for why the menu states are read from B-13 rather than
+     * restated here.
      *
      * @param \MyAdmin\Plugins\Testing\Contract\PluginSubject $subject
      * @param \ReflectionMethod                              $method
@@ -194,78 +267,117 @@ class TierB15NoOutput implements PluginInspector
             );
         }
 
-        $this->configure($subject, $module);
-        $eventSubject = $name === self::MENU_METHOD ? Harness::menu() : Harness::settings();
+        $isMenu = $name === self::MENU_METHOD;
+        $deferral = null;
 
-        $prepared = SubjectEvent::argumentsFor($method, $eventSubject, $subject, self::ID);
-        if ($prepared['skip'] !== null) {
-            return $prepared['skip'];
+        foreach (self::statesFor($name) as $state) {
+            $this->configure($subject, $module, $state);
+            $eventSubject = $isMenu ? Harness::menu() : Harness::settings();
+
+            $extra = $isMenu ? ['combination' => $state['label']] : [];
+            $prepared = SubjectEvent::argumentsFor($method, $eventSubject, $subject, self::ID, $extra);
+            if ($prepared['skip'] !== null) {
+                // A signature the harness cannot satisfy is a fact about the declaration, not
+                // about the panel state, so it is reported once rather than once per state.
+                return $prepared['skip'];
+            }
+
+            $args = $prepared['args'];
+            $result = self::capture(function () use ($method, $args) {
+                $method->invokeArgs(null, $args);
+            });
+
+            if ($result['output'] !== '') {
+                return Finding::failure(
+                    self::ID,
+                    self::describeOutput($subject->pluginClass(), $name.'()', $result['output'])
+                        . ($isMenu ? ' [observed with '.$state['label'].']' : ''),
+                    [
+                        'class'  => $subject->pluginClass(),
+                        'method' => $name,
+                        'bytes'  => strlen($result['output']),
+                        'output' => self::excerpt($result['output']),
+                    ] + ($isMenu ? ['combination' => $state['label']] : [])
+                );
+            }
+
+            if ($result['error'] !== null && $deferral === null) {
+                // Nothing was printed, but the handler did not finish either, so the rest of
+                // its body was never observed — an incomplete output check, which is a skip.
+                // The throw is reported by the inspector that owns the handler; see the class
+                // docblock for why that deferral is now sound and what it took to make it so.
+                // The exception message rides along regardless, so this finding is never the
+                // information-free "something went wrong somewhere" it used to be.
+                //
+                // Held rather than returned: a later state may still print, and the printed
+                // bytes are the actionable half.
+                $owner = $isMenu ? 'B-13' : 'B-12';
+                $deferral = Finding::skipped(
+                    self::ID,
+                    sprintf(
+                        '%s::%s() threw %s before completing, so the output check is incomplete;'
+                            . ' %s fails on the same throw and reports it: %s',
+                        $subject->pluginClass(),
+                        $name,
+                        get_class($result['error']),
+                        $owner,
+                        $result['error']->getMessage()
+                    ),
+                    [
+                        'class'     => $subject->pluginClass(),
+                        'method'    => $name,
+                        'exception' => get_class($result['error']),
+                        'blockedBy' => $owner,
+                    ] + ($isMenu ? ['combination' => $state['label']] : [])
+                );
+            }
         }
 
-        $result = $this->captureOutput($method, $prepared['args']);
-
-        if ($result['output'] !== '') {
-            return Finding::failure(
-                self::ID,
-                sprintf(
-                    '%s::%s() wrote %d byte(s) directly to output instead of going through add_output(): %s',
-                    $subject->pluginClass(),
-                    $name,
-                    strlen($result['output']),
-                    self::excerpt($result['output'])
-                ),
-                [
-                    'class'  => $subject->pluginClass(),
-                    'method' => $name,
-                    'bytes'  => strlen($result['output']),
-                    'output' => self::excerpt($result['output']),
-                ]
-            );
-        }
-
-        if ($result['error'] !== null) {
-            // Nothing was printed, but the handler did not finish either, so the rest of its
-            // body was never observed — an incomplete output check, which is a skip. The
-            // throw is reported by the inspector that owns the handler; see the class
-            // docblock for why that deferral is now sound and what it took to make it so.
-            // The exception message rides along regardless, so this finding is never the
-            // information-free "something went wrong somewhere" it used to be.
-            $owner = $name === self::MENU_METHOD ? 'B-13' : 'B-12';
-            return Finding::skipped(
-                self::ID,
-                sprintf(
-                    '%s::%s() threw %s before completing, so the output check is incomplete;'
-                        . ' %s fails on the same throw and reports it: %s',
-                    $subject->pluginClass(),
-                    $name,
-                    get_class($result['error']),
-                    $owner,
-                    $result['error']->getMessage()
-                ),
-                [
-                    'class'     => $subject->pluginClass(),
-                    'method'    => $name,
-                    'exception' => get_class($result['error']),
-                    'blockedBy' => $owner,
-                ]
-            );
-        }
-
-        return null;
+        return $deferral;
     }
 
     /**
-     * Invokes the handler with an output buffer wrapped around it.
+     * The panel/ACL states one handler is executed in.
+     *
+     * `getMenu()` gets B-13's four, taken from B-13 so the two lists cannot drift apart —
+     * the discard in B-13 is only honest while this inspector covers everything B-13 runs.
+     * `getSettings()` gets the single state B-12 uses, `ima=admin` with `has_acl()` granting
+     * everything: the state in which the most handler code is reachable, and therefore the
+     * one most likely to reach an `echo`.
+     *
+     * @param string $method handler name
+     * @return array<int,array<string,mixed>>
+     */
+    private static function statesFor($method)
+    {
+        if ($method === self::MENU_METHOD) {
+            return TierB13MenuExecute::combinations();
+        }
+        return [['ima' => 'admin', 'grant' => true, 'label' => 'ima=admin, has_acl()=true']];
+    }
+
+    // -----------------------------------------------------------------------
+    // Shared buffer discipline — used by A-1, A-5, B-11, B-12 and B-13 too
+    // -----------------------------------------------------------------------
+
+    /**
+     * Runs a callable with an output buffer wrapped around it.
+     *
+     * The one implementation of the catalogue's buffer discipline; see the class docblock
+     * for why it lives here and why nobody copies it. Callers get back both what escaped
+     * and what the callable threw, and decide for themselves which of the two to report —
+     * this method never throws and never files a Finding.
      *
      * See the class docblock on why the drain is written the way it is. The `finally` is
      * load-bearing: an exception escaping with our buffer still pushed would make PHPUnit
-     * attribute this inspector's buffer to the surrounding test.
+     * attribute this inspector's buffer to the surrounding test. Every caller must route its
+     * `catch` through the returned `error` rather than around this method, or that guarantee
+     * is only as good as the caller's own early returns.
      *
-     * @param \ReflectionMethod $method
-     * @param array<int,mixed>  $args
+     * @param callable $run the plugin code to execute
      * @return array{output:string,error:\Throwable|null}
      */
-    private function captureOutput(ReflectionMethod $method, array $args)
+    public static function capture(callable $run)
     {
         $baseline = ob_get_level();
         $captured = '';
@@ -273,7 +385,7 @@ class TierB15NoOutput implements PluginInspector
 
         ob_start();
         try {
-            $method->invokeArgs(null, $args);
+            $run();
         } catch (Throwable $e) {
             $error = $e;
         } finally {
@@ -290,6 +402,28 @@ class TierB15NoOutput implements PluginInspector
         }
 
         return ['output' => $captured, 'error' => $error];
+    }
+
+    /**
+     * The sentence every inspector uses to report bytes a plugin printed.
+     *
+     * Shared so that a failure filed by A-1, A-5 or B-11 reads as the same defect this
+     * assertion names, rather than as four differently-worded complaints about `echo`.
+     *
+     * @param string $class  plugin class
+     * @param string $site   what was executed, e.g. `getSettings()` or `__construct()`
+     * @param string $output the captured bytes
+     * @return string
+     */
+    public static function describeOutput($class, $site, $output)
+    {
+        return sprintf(
+            '%s::%s wrote %d byte(s) directly to output instead of going through add_output(): %s',
+            $class,
+            $site,
+            strlen($output),
+            self::excerpt($output)
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -320,14 +454,16 @@ class TierB15NoOutput implements PluginInspector
     /**
      * Resets the fakes and seeds the state one handler run sees.
      *
-     * `admin` + grant-all is deliberate: it is the state in which the most handler code
-     * is reachable, so it is the state most likely to reach an `echo`.
+     * `acl => []` rather than `false` for a denied grant, matching {@see TierB13MenuExecute}
+     * byte for byte: the two must configure the harness identically, or "B-15 sees everything
+     * B-13 sees" stops being true for reasons no test would notice.
      *
      * @param \MyAdmin\Plugins\Testing\Contract\PluginSubject $subject
      * @param string|null                                    $module
+     * @param array<string,mixed>                            $state   ima/grant pair
      * @return void
      */
-    private function configure(PluginSubject $subject, $module)
+    private function configure(PluginSubject $subject, $module, array $state)
     {
         Harness::reset();
         Bootstrap::init([
@@ -335,8 +471,8 @@ class TierB15NoOutput implements PluginInspector
             'constants' => $subject->constantOverrides(),
             'plugin'    => $subject->pluginClass(),
             'defines'   => $subject->serviceDefines(),
-            'ima'       => 'admin',
-            'acl'       => true,
+            'ima'       => $state['ima'],
+            'acl'       => $state['grant'] ? true : [],
         ]);
         Harness::reset();
     }
@@ -344,10 +480,14 @@ class TierB15NoOutput implements PluginInspector
     /**
      * Quotes the captured output at a length that fits a failure line.
      *
+     * Public because A-1, A-5 and B-11 quote captured bytes into their own findings and must
+     * truncate the same way — an inspector that pasted 40KB of markup into a matrix cell
+     * would make the artefact unreadable for everyone.
+     *
      * @param string $output
      * @return string
      */
-    private static function excerpt($output)
+    public static function excerpt($output)
     {
         $output = (string)$output;
         if (strlen($output) <= self::EXCERPT_BYTES) {

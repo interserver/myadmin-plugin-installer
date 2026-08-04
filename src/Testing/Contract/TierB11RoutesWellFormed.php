@@ -9,7 +9,6 @@
 namespace MyAdmin\Plugins\Testing\Contract;
 
 use ReflectionMethod;
-use Throwable;
 
 /**
  * Tier-B-11 — every route a plugin registers is well-formed.
@@ -86,6 +85,34 @@ use Throwable;
  * Deliberately **not** asserted: whether the handler file exists, and whether the source path
  * resolves. That is Tier-B-9/B-10's subject; B-11 observes the registered route, they observe
  * what it points at.
+ *
+ * ---------------------------------------------------------------------------------
+ * THE HANDLER RUNS UNDER A BUFFER, AND THIS INSPECTOR REPORTS WHAT IT PRINTS (R-8)
+ * ---------------------------------------------------------------------------------
+ * `execute` mode runs plugin code, and so does the `getHooks()` call in
+ * {@see handlerMethod()}. Both now go through {@see TierB15NoOutput::capture()}. Unbuffered,
+ * a `getRequirements()` carrying a stray `echo` escaped into the PHPUnit process, where
+ * `beStrictAboutOutputDuringTests="true"` + `failOnRisky="true"` filed it as
+ * `R  This test printed output: …` against **B-11** — the anonymous, mis-attributed report
+ * {@see TierB15NoOutput} exists to replace.
+ *
+ * The `getRequirements()` bytes are **reported here**. B-15 executes `getSettings()` and
+ * `getMenu()` and never touches this handler, so there is no owner to defer to and dropping
+ * them would leave the defect reported nowhere. It is a real defect: `function.requirements`
+ * fires from `tf::set_function_requirements()` during page setup, long before the theme has
+ * emitted a byte, so anything printed there lands above `<!DOCTYPE html>`.
+ *
+ * The `getHooks()` bytes are **discarded**: that call only asks which handler to run, and
+ * {@see TierA5HooksAreIdempotent} makes the identical call and reports what it prints.
+ *
+ * The finding is filed even when the handler registers no routes — the run is then reported
+ * as a skip *and* a failure, which is honest on both counts: no routes were observed, and
+ * bytes were. `Finding::notice()` is not used, because
+ * {@see \MyAdmin\Plugins\Testing\PluginContractTestCase} reads failures and skips only and
+ * would drop it.
+ *
+ * `source-scan` mode executes nothing — it replays recovered call sites onto a recorder — so
+ * it can print nothing and reports nothing.
  */
 class TierB11RoutesWellFormed implements PluginInspector
 {
@@ -161,14 +188,51 @@ class TierB11RoutesWellFormed implements PluginInspector
             ])];
         }
         $observed = $this->observe($subject, $handler);
+        $findings = $this->outputFindings($subject, $handler, $observed['output']);
         if ($observed['registrations'] === []) {
-            return [Finding::skipped($this->id(), $observed['skipReason'], [
+            $findings[] = Finding::skipped($this->id(), $observed['skipReason'], [
                 'class' => $subject->pluginClass(),
                 'handler' => $handler,
                 'mode' => $observed['mode'],
-            ])];
+            ]);
+            return $findings;
         }
-        return $this->validate($observed['registrations'], $observed['mode']);
+        return array_merge($findings, $this->validate($observed['registrations'], $observed['mode']));
+    }
+
+    /**
+     * The failure for a requirements handler that printed, or nothing when it stayed silent.
+     *
+     * Separate from {@see validate()} because it is not a statement about a route: it is the
+     * one thing this inspector observes that belongs to B-15's subject and has no B-15 owner.
+     * See the class docblock.
+     *
+     * @param PluginSubject $subject
+     * @param string        $handler
+     * @param string        $output captured bytes, '' when the handler stayed silent
+     * @return array<int,Finding>
+     */
+    private function outputFindings(PluginSubject $subject, $handler, $output)
+    {
+        if ($output === '') {
+            return [];
+        }
+        return [Finding::failure(
+            $this->id(),
+            TierB15NoOutput::describeOutput($subject->pluginClass(), $handler.'()', $output)
+                .' The "'.self::REQUIREMENTS_HOOK.'" hook fires during page setup, before the theme'
+                .' has emitted anything, so this lands above <!DOCTYPE html> in a real request.'
+                .' Reported here rather than under B-15 because B-15 executes the settings and menu'
+                .' handlers, never this one, so nothing else in the catalogue would ever see these'
+                .' bytes.',
+            [
+                'class' => $subject->pluginClass(),
+                'handler' => $handler,
+                'mode' => 'execute',
+                'bytes' => strlen($output),
+                'output' => TierB15NoOutput::excerpt($output),
+            ]
+        )];
     }
 
     /**
@@ -187,13 +251,15 @@ class TierB11RoutesWellFormed implements PluginInspector
         $reflection = $subject->reflection();
         $name = null;
         if ($reflection->hasMethod('getHooks')) {
-            try {
-                $hooks = $reflection->getMethod('getHooks')->invoke(null);
-                if (is_array($hooks)) {
-                    $name = $this->handlerFromHooks($hooks);
-                }
-            } catch (Throwable $error) {
-                $name = null;
+            // Buffered and dropped: this call is only asking which handler to run, and A-5
+            // makes the identical call and reports anything it prints. See the class docblock.
+            $method = $reflection->getMethod('getHooks');
+            $hooks = null;
+            $run = TierB15NoOutput::capture(function () use ($method, &$hooks) {
+                $hooks = $method->invoke(null);
+            });
+            if ($run['error'] === null && is_array($hooks)) {
+                $name = $this->handlerFromHooks($hooks);
             }
         }
         if ($name === null) {
@@ -228,40 +294,50 @@ class TierB11RoutesWellFormed implements PluginInspector
      *
      * @param PluginSubject $subject
      * @param string        $handler
-     * @return array{registrations:array<int,array<string,mixed>>,mode:string,skipReason:string}
+     * @return array{registrations:array<int,array<string,mixed>>,mode:string,skipReason:string,output:string}
      */
     private function observe(PluginSubject $subject, $handler)
     {
         $executed = $this->executeHandler($subject, $handler);
-        if ($executed !== null) {
+        if ($executed['loader'] !== null) {
             return [
-                'registrations' => $executed->registrations(),
+                'registrations' => $executed['loader']->registrations(),
                 'mode' => 'execute',
                 'skipReason' => 'plugin registers no routes',
+                'output' => $executed['output'],
             ];
         }
-        return $this->scanSource($subject, $handler);
+        // A handler that printed and *then* threw still printed. The mode falls back to
+        // source-scan for the route observation, but the bytes were really written and are
+        // carried out rather than dropped with the failed execution.
+        return $this->scanSource($subject, $handler) + ['output' => $executed['output']];
     }
 
     /**
-     * Invokes the handler against a recording loader.
+     * Invokes the handler against a recording loader, under an output buffer.
+     *
+     * Returns the loader *and* whatever escaped, because the two answer different questions
+     * and a handler can produce both — or produce bytes and then throw, in which case the
+     * loader is null and the bytes are still real.
      *
      * @param PluginSubject $subject
      * @param string        $handler
-     * @return TierB11RecordingLoader|null null when the handler could not be invoked
+     * @return array{loader:TierB11RecordingLoader|null,output:string} loader null when the handler could not be invoked
      */
     private function executeHandler(PluginSubject $subject, $handler)
     {
         $eventClass = 'Symfony\\Component\\EventDispatcher\\GenericEvent';
         $loader = new TierB11RecordingLoader();
         $event = class_exists($eventClass) ? new $eventClass($loader) : new SubjectEvent($loader);
-        try {
-            $method = new ReflectionMethod($subject->pluginClass(), $handler);
+        $class = $subject->pluginClass();
+        $run = TierB15NoOutput::capture(function () use ($class, $handler, $event) {
+            $method = new ReflectionMethod($class, $handler);
             $method->invoke(null, $event);
-        } catch (Throwable $error) {
-            return null;
-        }
-        return $loader;
+        });
+        return [
+            'loader' => $run['error'] === null ? $loader : null,
+            'output' => $run['output'],
+        ];
     }
 
     /**

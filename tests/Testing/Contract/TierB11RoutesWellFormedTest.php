@@ -501,6 +501,115 @@ class TierB11RoutesWellFormedTest extends TestCase
         $this->assertSame('source-scan', $failures[0]->context()['mode']);
     }
 
+    // -----------------------------------------------------------------------
+    // Buffer discipline (R-8)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Execute mode runs plugin code, so a `function.requirements` handler with a stray echo
+     * used to print straight into the PHPUnit process. `beStrictAboutOutputDuringTests` +
+     * `failOnRisky` then failed *this* test with `R  This test printed output: …`, naming
+     * neither the plugin nor the handler — the report B-15 exists to replace.
+     */
+    public function testRequirementsHandlerOutputIsCapturedRatherThanEscaping(): void
+    {
+        $class = $this->makePlugin(
+            "        echo 'b11 requirements leak';\n"
+            ."        \$loader->add_page_requirement('abuse', '/src/abuse.php');"
+        );
+
+        $level = ob_get_level();
+        ob_start();
+        $findings = $this->inspect($class);
+        $escaped = ob_get_clean();
+
+        $this->assertSame('', $escaped, 'the inspector must swallow the handler output, not re-emit it');
+        $this->assertSame($level, ob_get_level());
+        $this->assertNotSame([], $findings);
+    }
+
+    /**
+     * Captured is not the same as reported. B-15 executes `getSettings()` and `getMenu()` and
+     * never this handler, so B-11 is the only inspector in the catalogue that will ever see
+     * these bytes — dropping them would be the swallowed evidence the harness exists to catch.
+     */
+    public function testEchoingRequirementsHandlerIsReportedAsAFailure(): void
+    {
+        $class = $this->makePlugin(
+            "        echo 'b11 requirements leak';\n"
+            ."        \$loader->add_page_requirement('abuse', '/src/abuse.php');"
+        );
+
+        $failures = $this->failures($this->inspect($class));
+
+        $this->assertCount(1, $failures, $this->messages($failures));
+        $this->assertStringContainsString('b11 requirements leak', $failures[0]->message());
+        $this->assertStringContainsString('add_output()', $failures[0]->message());
+        $this->assertSame(21, $failures[0]->context()['bytes']);
+        $this->assertSame('execute', $failures[0]->context()['mode']);
+    }
+
+    /**
+     * "Registers no routes" is a skip, and it must not absorb the print: the two are separate
+     * observations and both are true.
+     */
+    public function testOutputIsReportedEvenWhenTheHandlerRegistersNoRoutes(): void
+    {
+        $class = $this->makePlugin("        echo 'b11 silent but noisy';");
+
+        $findings = $this->inspect($class);
+
+        $this->assertCount(2, $findings, $this->messages($findings));
+        $this->assertTrue($findings[0]->isFailure(), 'the printed bytes are a defect and must be reported');
+        $this->assertStringContainsString('b11 silent but noisy', $findings[0]->message());
+        $this->assertTrue($findings[1]->isSkipped(), 'and no route was observed, which is still a skip');
+    }
+
+    /**
+     * A handler that prints and then throws really printed. Execution mode fails and the
+     * route observation falls back to the source scan, but the bytes were written and must
+     * survive that fallback rather than being dropped with the failed invocation.
+     */
+    public function testOutputThatPrecededAThrowSurvivesTheSourceScanFallback(): void
+    {
+        $class = $this->makePlugin(
+            "        echo 'b11 printed then died';\n"
+            ."        \$loader->add_route_requirement('client', 'thing', '', 'thing', ['GET']);\n"
+            ."        throw new \\RuntimeException('b11 handler exploded');"
+        );
+
+        $failures = $this->failures($this->inspect($class));
+
+        $this->assertCount(2, $failures, $this->messages($failures));
+        $this->assertStringContainsString('b11 printed then died', $failures[0]->message());
+        $this->assertSame('source-scan', $failures[1]->context()['mode'], 'the route came from the scan');
+    }
+
+    /**
+     * `getHooks()` is buffered too — otherwise B-11 would be blamed for a print that belongs
+     * to A-5 — but the bytes are dropped here, because A-5 makes the identical call under the
+     * identical preconditions and reports them in its own column.
+     */
+    public function testGetHooksOutputIsSwallowedWithoutBeingReportedHere(): void
+    {
+        $class = $this->makePlugin(
+            "        \$loader->add_page_requirement('abuse', '/src/abuse.php');",
+            [
+                'extra' => "public static function getHooks() { echo 'b11 hooks leak'; "
+                    ."return ['function.requirements' => [__CLASS__, 'getRequirements']]; }",
+            ]
+        );
+
+        $level = ob_get_level();
+        ob_start();
+        $findings = $this->inspect($class);
+        $escaped = ob_get_clean();
+
+        $this->assertSame('', $escaped, 'B-11 must not let A-5\'s defect escape into the test process');
+        $this->assertSame($level, ob_get_level());
+        $this->assertSame([], $findings, 'a getHooks() print is A-5\'s to report: '.$this->messages($findings));
+    }
+
     /**
      * The rationale for TierB11RecordingLoader existing at all: get_routes() keys by path, so
      * a collision leaves no trace there. If this ever stops being true the recorder can be

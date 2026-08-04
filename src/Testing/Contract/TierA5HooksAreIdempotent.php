@@ -33,6 +33,37 @@ namespace MyAdmin\Plugins\Testing\Contract;
  * array, which is precisely what this assertion says it must do, and the scanner's
  * documented response — keep whatever hooks the package already had — is exactly the silent
  * staleness the harness exists to surface.
+ *
+ * ---------------------------------------------------------------------------------
+ * getHooks() RUNS UNDER A BUFFER, AND THIS INSPECTOR REPORTS WHAT IT PRINTS (R-8)
+ * ---------------------------------------------------------------------------------
+ * Every invocation of `getHooks()` in this class — both of `inspect()`'s and the one in
+ * {@see hookTable()} — goes through {@see TierB15NoOutput::capture()}. Unbuffered, a
+ * `getHooks()` with a leftover `var_dump()` escaped into the PHPUnit process and
+ * `beStrictAboutOutputDuringTests="true"` + `failOnRisky="true"` reported it as
+ * `R  This test printed output: …` against whichever of the eight inspectors that reach
+ * `getHooks()` happened to be running — A-5, A-6, A-7, A-8, B-9, B-9b, B-10 or B-12, plus
+ * B-11 by its own route. Attribution by coincidence is exactly what
+ * {@see TierB15NoOutput} was written to abolish.
+ *
+ * The bytes are **reported here and discarded in `hookTable()`**, which is the same division
+ * of labour this class already applies to failures. `hookTable()` gates on loadable class,
+ * declared method, `public static` and no required parameters, then invokes with no
+ * arguments; `inspect()` checks the identical four conditions and makes the identical call.
+ * So whenever a consumer's `hookTable()` call prints, this inspector's own call prints too,
+ * and turns red for it — the same "A-5 is the one that turns that condition red" contract
+ * that makes the consumers' `null` skips honest.
+ *
+ * There is nobody else to defer to: B-15 executes `getSettings()` and `getMenu()` and never
+ * calls `getHooks()`, so bytes dropped here would be reported nowhere. `Finding::notice()` is
+ * not an alternative — {@see \MyAdmin\Plugins\Testing\PluginContractTestCase} reads failures
+ * and skips only, so a notice is dropped by the consumer.
+ *
+ * Only A-6, A-7, A-8 and B-12 actually come through `hookTable()`. {@see TierB9HookTargetsResolve},
+ * {@see TierB9bHookKeysDispatched} and {@see TierB10RequirementPathsResolve} each invoke
+ * `getHooks()` directly and **unbuffered**, so R-8's guarantee does not yet cover them; they
+ * were outside the file scope this pass was made under. Routing them through `hookTable()`
+ * closes it, and is what those three should have been doing anyway.
  */
 class TierA5HooksAreIdempotent implements PluginInspector
 {
@@ -60,6 +91,14 @@ class TierA5HooksAreIdempotent implements PluginInspector
      * {@see PluginSubject} exists to prevent. They call this and skip on null; the failure
      * itself is A-5's to report.
      *
+     * Buffered, and the captured bytes dropped: a caller of this helper is asking for the
+     * hook table, not conducting an output check, and it must not have a `getHooks()` that
+     * prints attributed to *its* assertion — nor, once the buffer is here, allowed to escape
+     * and be attributed to whichever test happened to be running. The bytes are not lost,
+     * because {@see inspect()} makes the identical call under the identical preconditions
+     * and reports them; see the class docblock for why that premise holds rather than being
+     * assumed.
+     *
      * @param PluginSubject $subject
      * @return array<mixed,mixed>|null
      */
@@ -76,9 +115,11 @@ class TierA5HooksAreIdempotent implements PluginInspector
         if (!$method->isPublic() || !$method->isStatic() || $method->getNumberOfRequiredParameters() > 0) {
             return null;
         }
-        try {
+        $hooks = null;
+        $run = TierB15NoOutput::capture(function () use ($method, &$hooks) {
             $hooks = $method->invoke(null);
-        } catch (\Throwable $e) {
+        });
+        if ($run['error'] !== null) {
             return null;
         }
         return is_array($hooks) ? $hooks : null;
@@ -141,25 +182,30 @@ class TierA5HooksAreIdempotent implements PluginInspector
             )];
         }
 
-        try {
+        $first = null;
+        $firstRun = TierB15NoOutput::capture(function () use ($method, &$first) {
             $first = $method->invoke(null);
-        } catch (\Throwable $e) {
-            return [Finding::failure(
+        });
+        $printed = $firstRun['output'];
+
+        if ($firstRun['error'] !== null) {
+            $e = $firstRun['error'];
+            return $this->withOutput([Finding::failure(
                 'A-5',
                 $class.'::getHooks() threw '.get_class($e).': '.$e->getMessage()
                     .' — the plugin registers no hooks and PluginScanner keeps whatever stale'
                     .' entry it already had.',
                 ['class' => $class, 'problem' => 'threw', 'exception' => get_class($e)]
-            )];
+            )], $printed, $class);
         }
 
         if (!is_array($first)) {
-            return [Finding::failure(
+            return $this->withOutput([Finding::failure(
                 'A-5',
                 $class.'::getHooks() returned '.gettype($first).'; it must return an array of'
                     .' "module.event" => [class, method] entries.',
                 ['class' => $class, 'problem' => 'not-array', 'found' => gettype($first)]
-            )];
+            )], $printed, $class);
         }
 
         // An empty hook table is NOT a defect. Ten fleet packages — drbl-backups,
@@ -171,16 +217,21 @@ class TierA5HooksAreIdempotent implements PluginInspector
         // arrays are equal, so such a plugin passes.
         $findings = [];
 
-        try {
+        $second = null;
+        $secondRun = TierB15NoOutput::capture(function () use ($method, &$second) {
             $second = $method->invoke(null);
-        } catch (\Throwable $e) {
+        });
+        $printed .= $secondRun['output'];
+
+        if ($secondRun['error'] !== null) {
+            $e = $secondRun['error'];
             $findings[] = Finding::failure(
                 'A-5',
                 'The second consecutive '.$class.'::getHooks() call threw '.get_class($e).': '
                     .$e->getMessage().' — the method is not idempotent.',
                 ['class' => $class, 'problem' => 'second-call-threw', 'exception' => get_class($e)]
             );
-            return $findings;
+            return $this->withOutput($findings, $printed, $class);
         }
 
         if (!is_array($second) || $second != $first) {
@@ -198,6 +249,43 @@ class TierA5HooksAreIdempotent implements PluginInspector
             );
         }
 
+        return $this->withOutput($findings, $printed, $class);
+    }
+
+    /**
+     * Appends the "getHooks() printed" failure, if there is anything to append.
+     *
+     * Every return path below the first `invoke()` goes through here, because a `getHooks()`
+     * that also returns the wrong thing must not have its printed bytes dropped on the way
+     * out. Adding rather than replacing: the two are separate defects with separate fixes,
+     * and collapsing them would leave whichever one lost unreported.
+     *
+     * @param array<int,Finding> $findings what the assertion decided on its own terms
+     * @param string             $printed  everything both invocations wrote to output
+     * @param string             $class    plugin class
+     * @return array<int,Finding>
+     */
+    private function withOutput(array $findings, $printed, $class)
+    {
+        if ($printed === '') {
+            return $findings;
+        }
+        $findings[] = Finding::failure(
+            'A-5',
+            TierB15NoOutput::describeOutput($class, 'getHooks()', $printed)
+                .' PluginScanner calls getHooks() during `composer install`, where there is no page'
+                .' to print to, and MyAdmin calls it at boot, where printing lands above'
+                .' <!DOCTYPE html>. Reported here rather than under B-15 because B-15 executes the'
+                .' settings and menu handlers, never getHooks(), so nothing else in the catalogue'
+                .' would ever see these bytes.',
+            [
+                'class' => $class,
+                'problem' => 'printed',
+                'site' => 'getHooks',
+                'bytes' => strlen($printed),
+                'output' => TierB15NoOutput::excerpt($printed),
+            ]
+        );
         return $findings;
     }
 }

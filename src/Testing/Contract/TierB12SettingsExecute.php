@@ -10,7 +10,6 @@ namespace MyAdmin\Plugins\Testing\Contract;
 
 use MyAdmin\Plugins\Testing\Bootstrap;
 use MyAdmin\Plugins\Testing\Harness;
-use Throwable;
 
 /**
  * B-12 — `getSettings()` executes clean.
@@ -115,6 +114,29 @@ use Throwable;
  * `FakeSettings` whose emptiness decides the verdict.
  *
  * ---------------------------------------------------------------------------------
+ * OUTPUT — CAPTURED HERE, REPORTED BY B-15 (R-8)
+ * ---------------------------------------------------------------------------------
+ * `getSettings()` is invoked through {@see TierB15NoOutput::capture()}, so a handler that
+ * `echo`es cannot escape to the real output stream. Left unbuffered, it did not merely look
+ * untidy: `beStrictAboutOutputDuringTests="true"` plus `failOnRisky="true"` turned it into
+ * `R  This test printed output: …` filed against **B-12**, which names neither the plugin nor
+ * the handler and points the reader at the harness. That mis-attribution is the exact thing
+ * {@see TierB15NoOutput} was written to replace, so producing it here was self-defeating.
+ *
+ * The captured bytes are then **discarded**, which is a deliberate decision and not an
+ * oversight. B-15 executes this same `getSettings()`, on the same {@see PluginSubject}, in the
+ * same single state — `ima=admin` with `has_acl()` granting everything, seeded through the
+ * same {@see \MyAdmin\Plugins\Testing\Bootstrap::init()} keys — and reports the bytes as a
+ * failure of its own assertion. Reporting them here as well would put one defect in two
+ * matrix columns, which is the mirror image of the double-counting B-15's docblock refuses
+ * for throws. The premise is checkable rather than asserted: both inspectors gate on
+ * loadable class + declared + `public static` + an event {@see SubjectEvent::argumentsFor()}
+ * can build, and this inspector's gate is never the narrower of the two.
+ *
+ * Nothing is routed through {@see Finding::notice()}: the test case reads failures and skips
+ * only, so a notice would be swallowed by the consumer — the same problem one layer down.
+ *
+ * ---------------------------------------------------------------------------------
  * SIDE-EFFECT FREEDOM
  * ---------------------------------------------------------------------------------
  * The Phase 2 self-check runs this over 69 plugins **in one process**, so a `FakeSettings`
@@ -201,9 +223,12 @@ class TierB12SettingsExecute implements PluginInspector
             return [$prepared['skip']];
         }
 
-        try {
-            $method->invokeArgs(null, $prepared['args']);
-        } catch (Throwable $e) {
+        $args = $prepared['args'];
+        $run = TierB15NoOutput::capture(function () use ($method, $args) {
+            $method->invokeArgs(null, $args);
+        });
+
+        if ($run['error'] !== null) {
             SubjectEvent::releaseHarness();
             return [Finding::failure(
                 self::ID,
@@ -211,13 +236,13 @@ class TierB12SettingsExecute implements PluginInspector
                     '%s::%s() threw %s: %s',
                     $subject->pluginClass(),
                     self::METHOD,
-                    get_class($e),
-                    $e->getMessage()
+                    get_class($run['error']),
+                    $run['error']->getMessage()
                 ),
                 [
                     'class'     => $subject->pluginClass(),
                     'method'    => self::METHOD,
-                    'exception' => get_class($e),
+                    'exception' => get_class($run['error']),
                 ]
             )];
         }

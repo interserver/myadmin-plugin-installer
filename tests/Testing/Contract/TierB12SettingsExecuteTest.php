@@ -11,6 +11,7 @@ namespace Tests\MyAdmin\Plugins\Testing\Contract;
 use MyAdmin\Plugins\Testing\Bootstrap;
 use MyAdmin\Plugins\Testing\Contract\PluginSubject;
 use MyAdmin\Plugins\Testing\Contract\TierB12SettingsExecute;
+use MyAdmin\Plugins\Testing\Contract\TierB15NoOutput;
 use MyAdmin\Plugins\Testing\Fakes\FakeApp;
 use MyAdmin\Plugins\Testing\Harness;
 use PHPUnit\Framework\TestCase;
@@ -83,6 +84,38 @@ class TierB12GoodPlugin
         $settings->add_text_setting(self::$module, 'General', 'b12good_user', 'User', 'tip', 'root');
         $settings->add_password_setting(self::$module, 'General', 'b12good_pass', 'Pass', 'tip', 'secret');
         $settings->setTarget('global');
+    }
+}
+
+/**
+ * A `TierB12GoodPlugin` with a stray `echo` in front of the registrations.
+ *
+ * Correct on every assertion B-12 makes — it runs, it registers, and it registers under its
+ * own module — and defective on the one B-15 makes. That separation is the point: B-12 must
+ * report nothing here, having captured the bytes only so they cannot be blamed on the test.
+ */
+class TierB12EchoingPlugin
+{
+    /** @var string */
+    public static $module = 'b12echo';
+
+    /**
+     * @return array<string,array{0:string,1:string}>
+     */
+    public static function getHooks()
+    {
+        return ['b12echo.settings' => [self::class, 'getSettings']];
+    }
+
+    /**
+     * @param \Tests\MyAdmin\Plugins\Testing\Contract\TierB12Event $event
+     * @return void
+     */
+    public static function getSettings(TierB12Event $event)
+    {
+        echo '<div class="alert">b12 settings leak</div>';
+        $settings = $event->getSubject();
+        $settings->add_text_setting(self::$module, 'General', 'b12echo_user', 'User', 'tip', 'root');
     }
 }
 
@@ -1465,6 +1498,62 @@ class TierB12SettingsExecuteTest extends TestCase
         $next = $this->inspector->inspect(new PluginSubject(TierB12SilentPlugin::class));
         $this->assertCount(1, $next);
         $this->assertTrue($next[0]->isFailure());
+    }
+
+    // -----------------------------------------------------------------------
+    // Buffer discipline (R-8) — captured here, reported by B-15
+    // -----------------------------------------------------------------------
+
+    /**
+     * **R-8.** `getSettings()` is executed here, so an echoing handler used to print straight
+     * into the PHPUnit process and `beStrictAboutOutputDuringTests="true"` +
+     * `failOnRisky="true"` turned it into `R  This test printed output: …` attributed to
+     * B-12 — no plugin name, no handler name, reader pointed at the harness. That is exactly
+     * the report {@see \MyAdmin\Plugins\Testing\Contract\TierB15NoOutput} was written to
+     * replace, so producing it from here was self-defeating.
+     *
+     * @return void
+     */
+    public function testAnEchoingHandlerDoesNotEscapeIntoTheTestProcess()
+    {
+        $level = ob_get_level();
+        ob_start();
+
+        $findings = $this->inspector->inspect(new PluginSubject(TierB12EchoingPlugin::class));
+
+        $escaped = ob_get_clean();
+
+        $this->assertSame('', $escaped, 'the inspector must swallow the handler output, not re-emit it');
+        $this->assertSame($level, ob_get_level(), 'and must leave the buffer stack where it found it');
+        $this->assertSame([], $findings, 'the echo is not B-12\'s defect: '.$this->describe($findings));
+    }
+
+    /**
+     * The discard above is only honest while B-15 reports what was dropped, so the premise is
+     * executed rather than believed — the same standard
+     * `TierB15NoOutputTest::testDeferringOnASettingsThrowIsBackedByAFailureFromB12` holds the
+     * reverse deferral to. Making B-12 report the bytes as well would put one defect in two
+     * matrix columns; making it drop them silently would report the defect nowhere. Neither
+     * is possible while this test passes.
+     *
+     * @return void
+     */
+    public function testTheDiscardedOutputIsBackedByAFailureFromB15()
+    {
+        $subject = new PluginSubject(TierB12EchoingPlugin::class);
+
+        $mine = $this->inspector->inspect($subject);
+        $owner = (new TierB15NoOutput())->inspect($subject);
+
+        $this->assertSame([], $mine, $this->describe($mine));
+
+        $this->assertCount(1, $owner, $this->describe($owner));
+        $this->assertTrue(
+            $owner[0]->isFailure(),
+            'B-12 discards the bytes because B-15 reports them — if B-15 is silent they are reported nowhere'
+        );
+        $this->assertSame('B-15', $owner[0]->assertion());
+        $this->assertStringContainsString('b12 settings leak', $owner[0]->message());
     }
 
     /**

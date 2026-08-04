@@ -265,6 +265,96 @@ class TierB15ThrowingMenuPlugin
 }
 
 /**
+ * Pops more buffers than it pushed, destroying one that belonged to whoever called it.
+ *
+ * The mirror image of {@see TierB15UnbalancedBufferPlugin}, and the case the second drain
+ * loop exists for: without it the inspector returns at a *lower* nesting level than it was
+ * entered at, PHPUnit's own buffer is gone, and every test after this one is measured
+ * against a stack that is one short.
+ */
+class TierB15OverPoppingPlugin
+{
+    /** @var string */
+    public static $module = 'b15overpop';
+
+    /**
+     * @param \Tests\MyAdmin\Plugins\Testing\Contract\TierB15Event $event
+     * @return void
+     */
+    public static function getSettings(TierB15Event $event)
+    {
+        echo 'this goes down with the buffer';
+        ob_end_clean();
+        ob_end_clean();
+    }
+}
+
+/**
+ * Prints only when the viewer is not an admin — invisible to a single-state observation.
+ *
+ * This is the shape that made B-15's old one-state `getMenu()` run a lie: B-13 executed the
+ * client states, captured the bytes and discarded them, and B-15 never saw them.
+ */
+class TierB15ClientOnlyEchoMenuPlugin
+{
+    /** @var string */
+    public static $module = 'b15clientecho';
+
+    /**
+     * @param \Tests\MyAdmin\Plugins\Testing\Contract\TierB15Event $event
+     * @return void
+     */
+    public static function getMenu(TierB15Event $event)
+    {
+        if (\MyAdmin\App::ima() !== 'admin') {
+            echo 'b15 client-only menu leak';
+        }
+    }
+}
+
+/**
+ * Prints only when `has_acl()` denies — the other axis of B-13's cross product.
+ */
+class TierB15DeniedOnlyEchoMenuPlugin
+{
+    /** @var string */
+    public static $module = 'b15deniedecho';
+
+    /**
+     * @param \Tests\MyAdmin\Plugins\Testing\Contract\TierB15Event $event
+     * @return void
+     */
+    public static function getMenu(TierB15Event $event)
+    {
+        if (!has_acl('client_billing')) {
+            echo 'b15 acl-denied menu leak';
+        }
+    }
+}
+
+/**
+ * Records the panel/ACL state of every invocation, so a test can compare the states B-15
+ * executes against the states B-13 executes without either list being restated in the test.
+ */
+class TierB15StateRecordingMenuPlugin
+{
+    /** @var string */
+    public static $module = 'b15states';
+
+    /** @var array<int,string> */
+    public static $seen = [];
+
+    /**
+     * @param \Tests\MyAdmin\Plugins\Testing\Contract\TierB15Event $event
+     * @return void
+     */
+    public static function getMenu(TierB15Event $event)
+    {
+        self::$seen[] = \MyAdmin\App::ima() . '/' . (has_acl('client_billing') ? 'granted' : 'denied');
+    }
+}
+
+/**
  * B-15 — plugin handlers must not `echo`.
  *
  * @covers \MyAdmin\Plugins\Testing\Contract\TierB15NoOutput
@@ -537,6 +627,172 @@ class TierB15NoOutputTest extends TestCase
         $this->inspector->inspect(new PluginSubject(TierB15ThrowingPlugin::class));
 
         $this->assertSame($level, ob_get_level());
+    }
+
+    /**
+     * **R-8, mutant 1.** The drain pops innermost-first, so the chunks have to be
+     * reassembled outermost-first to come back in the order they were written. Nothing
+     * pinned that: reversing the concatenation kept every existing assertion green, because
+     * they all ask whether a substring is *present*, never in what order.
+     *
+     * An out-of-order excerpt is not cosmetic. The reader's job is to find the `echo`, and
+     * the message is the only positional evidence they get; showing the tail of a handler
+     * before its head sends them to the wrong line.
+     *
+     * @return void
+     */
+    public function testCaptureReassemblesNestedBuffersInTheOrderTheyWereWritten()
+    {
+        $result = TierB15NoOutput::capture(function () {
+            echo 'FIRST';
+            ob_start();
+            echo 'SECOND';
+            ob_start();
+            echo 'THIRD';
+        });
+
+        $this->assertSame('FIRSTSECONDTHIRD', $result['output']);
+        $this->assertNull($result['error']);
+    }
+
+    /**
+     * The same rule as it reaches the report a human reads.
+     *
+     * @return void
+     */
+    public function testAnAbandonedBufferIsQuotedInTheOrderItWasWritten()
+    {
+        $findings = $this->inspector->inspect(new PluginSubject(TierB15UnbalancedBufferPlugin::class));
+
+        $this->assertCount(1, $findings, $this->describe($findings));
+        $this->assertSame(
+            'beforeinside an abandoned buffer',
+            $findings[0]->context()['output'],
+            'the outer buffer was written first and must be quoted first'
+        );
+    }
+
+    /**
+     * **R-8, mutant 2.** A handler that pops past our buffer takes the caller's with it.
+     * Deleting the loop that pushes replacements left every existing assertion green,
+     * because no fixture ever over-popped — so the one line standing between the fleet run
+     * and a corrupted buffer stack was held in place by nothing at all.
+     *
+     * A sacrificial buffer is pushed by the test so the over-pop destroys that rather than
+     * PHPUnit's own: this test is about the depth being restored, not about proving PHPUnit
+     * survives having its buffer deleted.
+     *
+     * @return void
+     */
+    public function testRestoresTheNestingDepthWhenAHandlerPopsPastItsBuffer()
+    {
+        $level = ob_get_level();
+        ob_start();
+
+        $findings = $this->inspector->inspect(new PluginSubject(TierB15OverPoppingPlugin::class));
+
+        $restored = ob_get_level();
+        while (ob_get_level() > $level) {
+            ob_end_clean();
+        }
+
+        $this->assertSame(
+            $level + 1,
+            $restored,
+            'a handler that pops past our buffer must leave the nesting depth where it found it'
+        );
+        $this->assertSame(
+            [],
+            $findings,
+            'the bytes went down with the destroyed buffer, so there is nothing left to report: '
+                .$this->describe($findings)
+        );
+    }
+
+    /**
+     * `capture()` is public API for five other inspectors, so its throw contract is pinned
+     * here rather than inferred from the handlers that happen to use it.
+     *
+     * @return void
+     */
+    public function testCaptureReturnsTheThrowAndTheBytesThatPrecededIt()
+    {
+        $level = ob_get_level();
+
+        $result = TierB15NoOutput::capture(function () {
+            echo 'printed';
+            throw new \RuntimeException('then exploded');
+        });
+
+        $this->assertSame($level, ob_get_level(), 'the finally must drain even when the callable throws');
+        $this->assertSame('printed', $result['output']);
+        $this->assertInstanceOf(\RuntimeException::class, $result['error']);
+        $this->assertSame('then exploded', $result['error']->getMessage());
+    }
+
+    // -----------------------------------------------------------------------
+    // Menu states — B-12/B-13 may only discard what this inspector observes
+    // -----------------------------------------------------------------------
+
+    /**
+     * **R-8.** B-13 captures its four `getMenu()` runs and discards the bytes on the grounds
+     * that B-15 reports them. That is only true while B-15 executes the same four states, so
+     * the two lists are compared directly rather than restated: the fixture records the state
+     * it was invoked in, and the expectation is built from
+     * {@see TierB13MenuExecute::combinations()} itself.
+     *
+     * Reverting this inspector to its old single `ima=admin` + grant-all pass turns this red,
+     * instead of silently reopening the hole B-13's discard now depends on being closed.
+     *
+     * @return void
+     */
+    public function testObservesTheMenuInEveryStateB13Executes()
+    {
+        TierB15StateRecordingMenuPlugin::$seen = [];
+
+        $findings = $this->inspector->inspect(new PluginSubject(TierB15StateRecordingMenuPlugin::class));
+
+        $expected = [];
+        foreach (TierB13MenuExecute::combinations() as $combination) {
+            $expected[] = $combination['ima'].'/'.($combination['grant'] ? 'granted' : 'denied');
+        }
+
+        $this->assertSame([], $findings, $this->describe($findings));
+        $this->assertSame($expected, TierB15StateRecordingMenuPlugin::$seen);
+    }
+
+    /**
+     * The behavioural half of the same point: a leak only a client can trigger.
+     *
+     * @return void
+     */
+    public function testReportsAMenuThatOnlyEchoesForClients()
+    {
+        $findings = $this->inspector->inspect(new PluginSubject(TierB15ClientOnlyEchoMenuPlugin::class));
+
+        $this->assertCount(1, $findings, $this->describe($findings));
+        $this->assertTrue($findings[0]->isFailure());
+        $this->assertStringContainsString('b15 client-only menu leak', $findings[0]->message());
+        $this->assertSame(
+            'ima=client, has_acl()=true',
+            $findings[0]->context()['combination'],
+            'the report must name the state it was seen in, or the reader cannot reproduce it'
+        );
+    }
+
+    /**
+     * And the other axis, so a revert to two states rather than four is caught as well.
+     *
+     * @return void
+     */
+    public function testReportsAMenuThatOnlyEchoesWhenTheAclDenies()
+    {
+        $findings = $this->inspector->inspect(new PluginSubject(TierB15DeniedOnlyEchoMenuPlugin::class));
+
+        $this->assertCount(1, $findings, $this->describe($findings));
+        $this->assertTrue($findings[0]->isFailure());
+        $this->assertStringContainsString('b15 acl-denied menu leak', $findings[0]->message());
+        $this->assertSame('ima=admin, has_acl()=false', $findings[0]->context()['combination']);
     }
 
     // -----------------------------------------------------------------------

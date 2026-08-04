@@ -200,6 +200,90 @@ class TierA5HooksAreIdempotentTest extends TestCase
             )
         );
     }
+
+    // -----------------------------------------------------------------------
+    // Buffer discipline (R-8)
+    // -----------------------------------------------------------------------
+
+    /**
+     * A `getHooks()` with a leftover `var_dump()` must not print into the PHPUnit process.
+     *
+     * Unbuffered it did, and `beStrictAboutOutputDuringTests="true"` + `failOnRisky="true"`
+     * then failed whichever test happened to be running with `R  This test printed output: …`
+     * — attribution by coincidence, given seven inspectors reach `getHooks()`.
+     *
+     * @return void
+     */
+    public function testGetHooksOutputIsCapturedRatherThanEscaping()
+    {
+        $level = ob_get_level();
+        ob_start();
+
+        $findings = $this->inspect(TierA5FixturePrintingHooks::class);
+
+        $escaped = ob_get_clean();
+
+        $this->assertSame('', $escaped, 'the inspector must swallow the hook-table output, not re-emit it');
+        $this->assertSame($level, ob_get_level());
+        $this->assertNotSame([], $findings);
+    }
+
+    /**
+     * B-15 never calls `getHooks()`, so if A-5 drops the bytes nothing reports them. Both
+     * invocations count: the assertion calls the method twice and the second print is as
+     * real as the first.
+     *
+     * @return void
+     */
+    public function testPrintingGetHooksIsReportedAsAFailure()
+    {
+        $finding = $this->soleFailure($this->inspect(TierA5FixturePrintingHooks::class));
+
+        $this->assertSame('printed', $finding->context()['problem']);
+        $this->assertSame('getHooks', $finding->context()['site']);
+        $this->assertStringContainsString('a5 hooks leak', $finding->message());
+        $this->assertSame(
+            26,
+            $finding->context()['bytes'],
+            'the assertion invokes getHooks() twice, so both prints are part of the evidence'
+        );
+    }
+
+    /**
+     * A hook table that is both wrong *and* noisy is two defects, and neither may swallow the
+     * other: A-5 is the only reporter of both.
+     *
+     * @return void
+     */
+    public function testPrintingIsReportedAlongsideTheAssertionsOwnFailure()
+    {
+        $findings = $this->inspect(TierA5FixturePrintingNonArrayHooks::class);
+
+        $this->assertCount(2, $findings, 'the wrong return type and the printed bytes are separate defects');
+        $this->assertSame('not-array', $findings[0]->context()['problem']);
+        $this->assertSame('printed', $findings[1]->context()['problem']);
+    }
+
+    /**
+     * The consumers' half of the split. `hookTable()` buffers too — otherwise A-6/A-7/A-8/B-9/
+     * B-9b/B-12 would each be the one blamed for the print — and it drops what it caught,
+     * because {@see TierA5HooksAreIdempotent::inspect()} makes the identical call and reports it.
+     *
+     * @return void
+     */
+    public function testHookTableSwallowsOutputAndStillReturnsTheTable()
+    {
+        $level = ob_get_level();
+        ob_start();
+
+        $hooks = TierA5HooksAreIdempotent::hookTable(new PluginSubject(TierA5FixturePrintingHooks::class));
+
+        $escaped = ob_get_clean();
+
+        $this->assertSame('', $escaped, 'a consumer of hookTable() must not be blamed for the plugin printing');
+        $this->assertSame($level, ob_get_level());
+        $this->assertSame(['a5printing.settings' => [TierA5FixturePrintingHooks::class, 'getSettings']], $hooks);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -307,6 +391,40 @@ class TierA5FixtureEmptyReturn
     public static function getHooks()
     {
         return [];
+    }
+}
+
+/**
+ * A hook table with a leftover debug print. `PluginScanner` calls `getHooks()` during
+ * `composer install`, where there is no page to print to, and MyAdmin calls it at boot.
+ */
+class TierA5FixturePrintingHooks
+{
+    /** @var string */
+    public static $module = 'a5printing';
+
+    /**
+     * @return array<string,array<int,string>>
+     */
+    public static function getHooks()
+    {
+        echo 'a5 hooks leak';
+        return ['a5printing.settings' => [__CLASS__, 'getSettings']];
+    }
+}
+
+/**
+ * Prints *and* returns the wrong type — two defects that must both survive the report.
+ */
+class TierA5FixturePrintingNonArrayHooks
+{
+    /**
+     * @return string
+     */
+    public static function getHooks()
+    {
+        echo 'a5 noisy and wrong';
+        return 'not an array';
     }
 }
 
