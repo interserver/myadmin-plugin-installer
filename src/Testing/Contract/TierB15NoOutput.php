@@ -57,6 +57,44 @@ use Throwable;
  * Content is reassembled outermost-first, which is chronological order: `ob_get_clean()`
  * returns the innermost buffer, and an inner buffer's content was written after the outer
  * one's.
+ *
+ * ---------------------------------------------------------------------------------
+ * A HANDLER THAT THROWS — THE DEFERRAL, AND WHY IT IS NOW SOUND
+ * ---------------------------------------------------------------------------------
+ * A handler that throws before finishing was only partly observed, so "it emitted no
+ * output" would be a claim about a body that never ran to the end: a skip, not a pass.
+ * The throw itself is not this inspector's finding — B-15 is "handlers emit no direct
+ * output", and turning it red for a fatal would file the defect under the wrong heading
+ * and paint one bug into two matrix columns.
+ *
+ * That deferral was, until R-3, **circular**. B-12 gated `getSettings()` on reachability
+ * *before* executing it, so for the 13 packages whose handler no hook registers, B-12
+ * skipped and this inspector deferred to a check that had declined to run. A plugin whose
+ * `getSettings()` fatals on line 1 of its body passed all 17 assertions — 12 passes, 5
+ * skips, 0 failures. The comment here said "B-12/B-13 own the throw itself" while the
+ * message beside it proved the `Error` had been caught, read and thrown away.
+ *
+ * Deferral is kept rather than replaced with a failure because the premise is now true,
+ * and true for a checkable reason rather than by assertion. The preconditions for
+ * executing a handler are the same on both sides and B-12/B-13's are never the narrower:
+ *
+ *  - loadable class, declared method, `public static`, and an event this environment can
+ *    build — each of those is decided by the same code ({@see PluginSubject},
+ *    {@see SubjectEvent::argumentsFor()}) against the same subject, so whenever this
+ *    inspector executes a handler, so do they;
+ *  - {@see TierB12SettingsExecute} no longer consults reachability before invoking, and
+ *    {@see TierB13MenuExecute} has never had a gate at all — it runs `getMenu()` in four
+ *    panel/ACL states, one of which is this inspector's `ima=admin` + grant-all;
+ *  - both report a throw as {@see Finding::failure()}, unconditionally.
+ *
+ * Pinned, not trusted: `TierB15NoOutputTest::testDeferringOnASettingsThrowIsBackedByAFailure
+ * FromB12` and its `…OnAMenuThrow…FromB13` twin run both inspectors over one subject — the
+ * orphaned fatal handler that used to slip through — and require the owner to be red
+ * whenever this one defers. Reintroducing any pre-execution gate in B-12 turns those tests
+ * red instead of quietly reopening the loop. The known residual is a handler that throws only
+ * on a *later* invocation than the owner's, which no gate change can cause; the exception
+ * message and the `blockedBy` context are what a reader has left in that case, and they are
+ * carried here for exactly that reason even though the finding defers.
  */
 class TierB15NoOutput implements PluginInspector
 {
@@ -186,20 +224,29 @@ class TierB15NoOutput implements PluginInspector
         }
 
         if ($result['error'] !== null) {
-            // Nothing was printed, but the handler did not finish either, so the rest of
-            // its body was never observed. B-12/B-13 own the throw itself.
+            // Nothing was printed, but the handler did not finish either, so the rest of its
+            // body was never observed — an incomplete output check, which is a skip. The
+            // throw is reported by the inspector that owns the handler; see the class
+            // docblock for why that deferral is now sound and what it took to make it so.
+            // The exception message rides along regardless, so this finding is never the
+            // information-free "something went wrong somewhere" it used to be.
+            $owner = $name === self::MENU_METHOD ? 'B-13' : 'B-12';
             return Finding::skipped(
                 self::ID,
                 sprintf(
-                    '%s::%s() threw %s before completing, so the output check is incomplete',
+                    '%s::%s() threw %s before completing, so the output check is incomplete;'
+                        . ' %s fails on the same throw and reports it: %s',
                     $subject->pluginClass(),
                     $name,
-                    get_class($result['error'])
+                    get_class($result['error']),
+                    $owner,
+                    $result['error']->getMessage()
                 ),
                 [
                     'class'     => $subject->pluginClass(),
                     'method'    => $name,
                     'exception' => get_class($result['error']),
+                    'blockedBy' => $owner,
                 ]
             );
         }

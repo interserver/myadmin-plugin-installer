@@ -30,7 +30,8 @@ use Throwable;
  *
  *  1. it does not throw;
  *  2. it registers **at least one** setting — a handler that runs and registers nothing
- *     is indistinguishable from a handler that was never wired up;
+ *     is indistinguishable from a handler that was never wired up. This is the one
+ *     assertion the reachability gate below can withhold; 1 and 3 are asked of all 69;
  *  3. when the plugin declares a non-empty `$module`, every registered setting lands
  *     under that module's section. Measured across the fleet, all 42 module-declaring
  *     plugins pass `self::$module` (or `_(self::$module)`) as the section argument to
@@ -46,14 +47,42 @@ use Throwable;
  * path — the method is dead code, and "it registers nothing" is then a vacuous complaint
  * about a body that production never runs.
  *
+ * **The gate covers assertion 2 and nothing else, and it is consulted only after the
+ * handler has run.** That ordering is the whole correction of a bug this inspector shipped
+ * with. The gate used to return *before* `invokeArgs()`, so an unregistered handler was
+ * never executed — and B-15, which does execute it, caught the resulting `Error` and
+ * downgraded itself to a skip on the grounds that "B-12 owns the throw". B-12 had declined
+ * to run. A plugin whose `getSettings()` fatals on the first line of its body therefore
+ * passed all 17 assertions with zero failures: 12 passes, 5 skips, 0 failures, reproduced
+ * twice. Neither inspector was blind; they were each waiting for the other.
+ *
+ * What makes assertion 2 different from its two siblings is not observability — the body
+ * is equally observable either way, which is exactly what B-15 demonstrated by observing
+ * it. It is **consequence**. "Registered nothing" is a defect because core would render an
+ * empty settings page; with no dispatch path there is no page and the complaint evaporates.
+ * A throw and a stray section evaporate under no such argument: a handler that fatals is
+ * broken code that the next commit — the one that finally registers the hook — turns into
+ * a production fatal, and it is reported here for every plugin that declares one.
+ *
+ * Nor does the gate consume a *pass*. A handler that registers settings has satisfied
+ * assertion 2 as a matter of fact, whatever dispatches it, so an unregistered handler that
+ * runs clean is a pass and not a skip: reporting "could not run" about a check that ran and
+ * passed understates coverage, which is the same misreport as overstating it
+ * ({@see \MyAdmin\Plugins\Testing\PluginContractTestCase::testPluginSatisfiesContractAssertion}
+ * makes the same argument about notices). The dead-code fact belongs to whichever check
+ * owns dead code; it is not smuggled in here as a false negative.
+ *
  * Measured over all 69 fleet packages, 56 register the handler and 13 do not. Of those 13,
  * ten return an empty hook table (registrations deliberately commented out — the same ten
  * A-5's docblock names), and three — modernbill-plugin, monitoring-plugin, webuzo-vps —
  * register only `function.requirements`. Reporting all 13 as contract violations would put
  * thirteen false failures next to the single genuine one (`detain/myadmin-powerdns`, which
  * *does* register the handler and still registers no settings), and dead code is a different
- * defect owned by a different check. So an unregistered handler is a
- * {@see Finding::skipped()}, never a failure and never an empty pass.
+ * defect owned by a different check. So an unregistered handler that registered nothing is a
+ * {@see Finding::skipped()}, never a failure and never an empty pass. Force-executing all 13
+ * confirms the gate is load-bearing rather than decorative and that removing it would produce
+ * exactly those 13 false failures: 13 of 13 register zero settings — and, equally, 0 throw,
+ * 0 register into a foreign section, so opening assertions 1 and 3 to them costs nothing.
  *
  * **The gate is on the hook's target, not on a fixed key.** The obvious rule — "does
  * `getHooks()` contain `system.settings`?" — is wrong, and wrong by a factor of three:
@@ -79,6 +108,11 @@ use Throwable;
  * `ConstantOrderingTest`, which pins this. {@see TierB12SettingsExecute::prime()}
  * therefore calls `Bootstrap::init()` with `constants` + `plugin` *first*, and only then
  * reads the module and re-initialises with it.
+ *
+ * The second ordering rule is the one the deferral loop above cost us: **execute, snapshot,
+ * then ask about reachability.** Executing last would put a gate in front of the handler
+ * again. Snapshotting last would let a `getHooks()` with side effects add to the very
+ * `FakeSettings` whose emptiness decides the verdict.
  *
  * ---------------------------------------------------------------------------------
  * SIDE-EFFECT FREEDOM
@@ -153,16 +187,11 @@ class TierB12SettingsExecute implements PluginInspector
             )];
         }
 
-        // Priming must come first: reading the hook table calls getHooks(), which
-        // initialises the class, which evaluates every static initializer — including the
-        // bare-constant ones. See prime() for why that ordering is load-bearing.
+        // Priming must come first: touching the class at all — reading `$module` here,
+        // calling the handler below, reading the hook table later — initialises it, which
+        // evaluates every static initializer including the bare-constant ones. See prime()
+        // for why that ordering is load-bearing.
         $module = $this->prime($subject);
-
-        $registeredBy = $this->reachability($subject);
-        if ($registeredBy instanceof Finding) {
-            SubjectEvent::releaseHarness();
-            return [$registeredBy];
-        }
 
         $settingsFake = Harness::settings();
 
@@ -193,12 +222,23 @@ class TierB12SettingsExecute implements PluginInspector
             )];
         }
 
-        // Read every observation out before the reset that drops it.
+        // Read every observation out before the reset that drops it — and before
+        // reachability() calls getHooks(), so that even a hook table with side effects
+        // cannot alter what this run observed.
         $registered = $settingsFake->settingsAdded();
         $populated = $this->populatedSections($settingsFake);
-        SubjectEvent::releaseHarness();
 
         if ($registered === []) {
+            // The only branch reachability can make vacuous, and therefore the only branch
+            // it gates. "Registered nothing" is a defect *because core would render an empty
+            // page*; with no dispatch path there is no page, so the complaint evaporates.
+            // Its two siblings do not evaporate: a throw and a stray section are facts about
+            // the body, and they are reported above and below for all 69 packages.
+            $registeredBy = $this->reachability($subject);
+            SubjectEvent::releaseHarness();
+            if ($registeredBy instanceof Finding) {
+                return [$registeredBy];
+            }
             return [Finding::failure(
                 self::ID,
                 sprintf(
@@ -209,6 +249,8 @@ class TierB12SettingsExecute implements PluginInspector
                 ['class' => $subject->pluginClass(), 'method' => self::METHOD, 'settings' => 0]
             )];
         }
+
+        SubjectEvent::releaseHarness();
 
         if ($module === null || $module === '') {
             return [];
@@ -250,12 +292,16 @@ class TierB12SettingsExecute implements PluginInspector
 
     /**
      * The hook keys that register this class's `getSettings`, or the Finding explaining why
-     * the handler's execution behaviour is not observable.
+     * "it registered nothing" cannot be held against this plugin.
+     *
+     * Called only from the `$registered === []` branch, and only after the handler has run:
+     * it decides the fate of assertion 2 alone. See the class docblock for why the other two
+     * assertions are not its business.
      *
      * Three outcomes, and the difference between them is the whole point:
      *
-     *  - a non-empty list of keys — core has a path to the handler, so B-12's assertions are
-     *    about something real and the caller executes it;
+     *  - a non-empty list of keys — core has a path to the handler, so an empty registration
+     *    is a real defect and the caller reports it;
      *  - a skip naming **A-5** — the hook table itself could not be obtained (missing,
      *    non-static, throwing, non-array `getHooks()`). A-5 turns exactly that condition red;
      *    reporting it a second time here would make one defect look like two;
@@ -269,9 +315,9 @@ class TierB12SettingsExecute implements PluginInspector
      * calling `getHooks()` here, for the reason that helper exists: two inspectors that
      * separately decide "can getHooks() be called?" are two inspectors that can disagree.
      *
-     * Reading the table between {@see prime()}'s trailing `Harness::reset()` and the handler
-     * run cannot seed the `FakeSettings` and so cannot manufacture a pass for assertion 2:
-     * A-5 requires `getHooks()` to be a pure, idempotent producer of an array, and a
+     * Reading the table *after* the handler ran cannot manufacture a verdict either way,
+     * because the caller has already snapshotted what the handler registered. Belt and
+     * braces: A-5 requires `getHooks()` to be a pure, idempotent producer of an array, so a
      * `getHooks()` that registered settings as a side effect would be an A-5 failure long
      * before it were a B-12 one.
      *
@@ -285,12 +331,20 @@ class TierB12SettingsExecute implements PluginInspector
             return Finding::skipped(
                 self::ID,
                 sprintf(
-                    '%s::getHooks() could not be evaluated, so whether %s() is ever registered'
-                        . ' cannot be determined; Tier-A-5 reports the root cause',
+                    '%s::%s() ran clean and registered nothing, but %s::getHooks() could not be'
+                        . ' evaluated, so whether anything ever registers the handler cannot be'
+                        . ' determined and the empty registration cannot be called a defect;'
+                        . ' Tier-A-5 reports the root cause',
                     $subject->pluginClass(),
-                    self::METHOD
+                    self::METHOD,
+                    $subject->pluginClass()
                 ),
-                ['class' => $subject->pluginClass(), 'method' => self::METHOD, 'blockedBy' => 'A-5']
+                [
+                    'class'     => $subject->pluginClass(),
+                    'method'    => self::METHOD,
+                    'blockedBy' => 'A-5',
+                    'executed'  => true,
+                ]
             );
         }
 
@@ -322,16 +376,20 @@ class TierB12SettingsExecute implements PluginInspector
             return Finding::skipped(
                 self::ID,
                 sprintf(
-                    'no entry in %s::getHooks() is a [class, method] pair, so whether %s() is'
-                        . ' registered cannot be determined; Tier-A-8 reports the malformed hook values',
+                    '%s::%s() ran clean and registered nothing, but no entry in %s::getHooks() is a'
+                        . ' [class, method] pair, so whether the handler is registered cannot be'
+                        . ' determined and the empty registration cannot be called a defect;'
+                        . ' Tier-A-8 reports the malformed hook values',
                     $subject->pluginClass(),
-                    self::METHOD
+                    self::METHOD,
+                    $subject->pluginClass()
                 ),
                 [
                     'class'     => $subject->pluginClass(),
                     'method'    => self::METHOD,
                     'blockedBy' => 'A-8',
                     'hooks'     => count($hooks),
+                    'executed'  => true,
                 ]
             );
         }
@@ -340,7 +398,15 @@ class TierB12SettingsExecute implements PluginInspector
     }
 
     /**
-     * The skip for a handler nothing registers.
+     * The skip for a handler nothing registers, which ran and registered nothing.
+     *
+     * Both halves of that sentence are load-bearing. The handler **was executed** — this is
+     * reached from below `invokeArgs()`, so a body that fatals has already been reported as a
+     * failure and never arrives here — and it is withheld from assertion 2 only, because a
+     * settings page core can never render cannot be empty. Saying "unobservable" here, as an
+     * earlier revision did, was both wrong and expensive: B-15 executes the same handler and
+     * observes it perfectly well, and the word licensed a gate that skipped the plugin before
+     * running it at all.
      *
      * Deliberately a skip carrying the orphan fact in its own message and context, rather
      * than a skip plus a {@see Finding::notice()}. The notice would be lost, not gained:
@@ -366,9 +432,12 @@ class TierB12SettingsExecute implements PluginInspector
             sprintf(
                 '%s::%s() is ORPHANED: no hook returned by %s::getHooks() targets it, so it is'
                     . ' not registered via system.settings (nor via the per-module <module>.settings'
-                    . ' form) and core can never invoke it in production. Its execution behaviour is'
-                    . ' therefore unobservable and B-12 cannot judge it. The handler is dead code'
-                    . ' until a hook registers it — that is a real defect, but a different one.',
+                    . ' form) and core can never invoke it in production. It was executed here all'
+                    . ' the same — it neither threw nor filed a setting under a foreign section — but'
+                    . ' it registered nothing, and an empty settings page core can never render is'
+                    . ' inconsequential rather than defective, so that one assertion is withheld'
+                    . ' instead of failed. The handler is dead code until a hook registers it — that'
+                    . ' is a real defect, but a different one.',
                 $subject->pluginClass(),
                 self::METHOD,
                 $subject->pluginClass()
@@ -377,6 +446,7 @@ class TierB12SettingsExecute implements PluginInspector
                 'class'    => $subject->pluginClass(),
                 'method'   => self::METHOD,
                 'orphaned' => true,
+                'executed' => true,
                 'hooks'    => count($hooks),
                 'hookKeys' => implode(',', array_keys($hooks)),
             ]

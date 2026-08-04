@@ -329,12 +329,18 @@ class TierB12BareConstantPlugin
 // ---------------------------------------------------------------------------------
 
 /**
- * The commonest orphan shape: a full `getSettings()` beside an **empty** hook table.
+ * The commonest orphan shape: a `getSettings()` beside an **empty** hook table, whose body
+ * registers nothing.
  *
  * Ten fleet packages are exactly this — drbl-backups, gluster-backups, google-analytics,
  * hotjar-analytics, kayako-chat, novnc-plugin, payum-payments, piwik-analytics,
- * raid-backups, slack-chat — because their registrations are commented out on purpose.
- * The handler would register settings if anything ran it; nothing does.
+ * raid-backups, slack-chat — because their registrations are commented out on purpose. The
+ * body below is theirs verbatim: take the subject, do nothing with it.
+ *
+ * Registering nothing is what makes this fixture exercise the gate. Assertion 2 is the only
+ * assertion reachability can withhold, so an orphan that *did* register would never consult
+ * the gate at all and would pass on its own merits — see
+ * {@see TierB12OrphanThatRegistersPlugin}, which pins that half.
  */
 class TierB12OrphanPlugin
 {
@@ -355,8 +361,171 @@ class TierB12OrphanPlugin
      */
     public static function getSettings(TierB12Event $event)
     {
+        $event->getSubject();
+    }
+}
+
+/**
+ * An orphan whose body *does* register a setting, correctly scoped.
+ *
+ * All three assertions are then answered on their merits — it ran, it registered, and it
+ * registered under its own module — so the verdict is a pass. The gate withholds assertion 2
+ * only in the negative direction: "registered nothing" is inconsequential for a handler core
+ * cannot dispatch, but "registered something" is a fact no dispatch table can take away, and
+ * reporting a skip over it would understate coverage as badly as a false pass overstates it.
+ */
+class TierB12OrphanThatRegistersPlugin
+{
+    /** @var string */
+    public static $module = 'b12orphanreg';
+
+    /**
+     * @return array<string,array{0:string,1:string}>
+     */
+    public static function getHooks()
+    {
+        return [];
+    }
+
+    /**
+     * @param \Tests\MyAdmin\Plugins\Testing\Contract\TierB12Event $event
+     * @return void
+     */
+    public static function getSettings(TierB12Event $event)
+    {
         $settings = $event->getSubject();
-        $settings->add_text_setting(self::$module, 'General', 'b12orphan_key', 'Key', 'tip', '1');
+        $settings->add_text_setting(self::$module, 'General', 'b12orphanreg_key', 'Key', 'tip', '1');
+    }
+}
+
+/**
+ * **The R-3 regression fixture.** An orphaned handler that fatals on the first line of its
+ * body — an undefined function, which is the shape a bare `function_requirements()` helper or
+ * a core-only function takes when the plugin is loaded outside core.
+ *
+ * Against the inspector as originally shipped this plugin passed the entire catalogue: B-12
+ * skipped it as ORPHANED *before executing it*, and B-15 executed it, caught the `Error` and
+ * downgraded itself to a skip because "B-12/B-13 own the throw" — a B-12 that had declined to
+ * run. 12 passes, 5 skips, 0 failures, reproduced twice. Assertion 1 is not the gate's
+ * business, so it must now be red.
+ */
+class TierB12FatalOrphanPlugin
+{
+    /** @var string */
+    public static $module = 'b12fatalorphan';
+
+    /**
+     * @return array<string,array{0:string,1:string}>
+     */
+    public static function getHooks()
+    {
+        return [];
+    }
+
+    /**
+     * @param \Tests\MyAdmin\Plugins\Testing\Contract\TierB12Event $event
+     * @return void
+     */
+    public static function getSettings(TierB12Event $event)
+    {
+        tierb12_function_that_does_not_exist_anywhere();
+    }
+}
+
+/**
+ * An orphan that files a setting under someone else's section.
+ *
+ * Assertion 3 is a property of the body, not of the dispatch table: the day a hook finally
+ * registers this handler, the stray section is a live defect, and the harness should have
+ * said so on the day the body was written.
+ */
+class TierB12StrayOrphanPlugin
+{
+    /** @var string */
+    public static $module = 'b12strayorphan';
+
+    /**
+     * @return array<string,array{0:string,1:string}>
+     */
+    public static function getHooks()
+    {
+        return [];
+    }
+
+    /**
+     * @param \Tests\MyAdmin\Plugins\Testing\Contract\TierB12Event $event
+     * @return void
+     */
+    public static function getSettings(TierB12Event $event)
+    {
+        $settings = $event->getSubject();
+        $settings->add_text_setting('Billing', 'General', 'b12strayorphan_key', 'Key', 'tip', '1');
+    }
+}
+
+/**
+ * A `getHooks()` with a side effect on the settings fake — the one thing that could make
+ * "did the handler register anything?" answer differently depending on *when* it is asked.
+ *
+ * A-5 forbids this shape, and a plugin like it would be red there long before it were red
+ * here. The fixture exists because the inspector reads the hook table *after* running the
+ * handler now, and that reordering is only safe while the observation is snapshotted first.
+ * Nothing else in the suite can tell the two orders apart.
+ */
+class TierB12HooksWithSideEffectPlugin
+{
+    /** @var string */
+    public static $module = 'b12hookside';
+
+    /**
+     * @return array<string,array{0:string,1:string}>
+     */
+    public static function getHooks()
+    {
+        Harness::settings()->add_text_setting(self::$module, 'General', 'b12hookside_key', 'Key', 'tip', '1');
+        return [];
+    }
+
+    /**
+     * @param \Tests\MyAdmin\Plugins\Testing\Contract\TierB12Event $event
+     * @return void
+     */
+    public static function getSettings(TierB12Event $event)
+    {
+        $event->getSubject();
+    }
+}
+
+/**
+ * Records whether its body ran, so the *ordering* can be asserted directly rather than
+ * inferred from a verdict.
+ *
+ * The gate must be consulted after the handler, not before it. Every other consequence of
+ * getting that backwards is indirect; this fixture makes it a single boolean.
+ */
+class TierB12OrphanRecordingPlugin
+{
+    /** @var string */
+    public static $module = 'b12orphanrec';
+
+    /** @var bool set by the handler, read by the test */
+    public static $ran = false;
+
+    /**
+     * @return array<string,array{0:string,1:string}>
+     */
+    public static function getHooks()
+    {
+        return [];
+    }
+
+    /**
+     * @param \Tests\MyAdmin\Plugins\Testing\Contract\TierB12Event $event
+     * @return void
+     */
+    public static function getSettings(TierB12Event $event)
+    {
+        self::$ran = true;
     }
 }
 
@@ -366,6 +535,8 @@ class TierB12OrphanPlugin
  * Three fleet packages — modernbill-plugin, monitoring-plugin, webuzo-vps — register
  * `function.requirements` and nothing else. A gate that merely asked "is the hook table
  * non-empty?" would call these reachable and report them as defects.
+ *
+ * Registers nothing, for the reason {@see TierB12OrphanPlugin} gives.
  */
 class TierB12PartialHooksPlugin
 {
@@ -394,8 +565,7 @@ class TierB12PartialHooksPlugin
      */
     public static function getSettings(TierB12Event $event)
     {
-        $settings = $event->getSubject();
-        $settings->add_text_setting(self::$module, 'General', 'b12partial_key', 'Key', 'tip', '1');
+        $event->getSubject();
     }
 }
 
@@ -462,6 +632,8 @@ class TierB12UndispatchedKeyPlugin
 /**
  * `getHooks()` blows up, so whether the handler is registered is unknowable. A-5's defect,
  * reported by A-5 — B-12 defers instead of adding a second red cell for one cause.
+ *
+ * The body registers nothing, because that is the only branch on which the answer matters.
  */
 class TierB12ThrowingHooksPlugin
 {
@@ -482,8 +654,38 @@ class TierB12ThrowingHooksPlugin
      */
     public static function getSettings(TierB12Event $event)
     {
-        $settings = $event->getSubject();
-        $settings->add_text_setting(self::$module, 'General', 'b12throwhooks_key', 'Key', 'tip', '1');
+        $event->getSubject();
+    }
+}
+
+/**
+ * `getHooks()` blows up **and** so does the handler.
+ *
+ * The A-5 deferral is the same shape of promise the orphan skip is, and it was wrong in the
+ * same way: a gate ahead of `invokeArgs()` meant an unevaluable hook table hid a fatal
+ * handler behind a skip that pointed at an inspector which reports something else entirely.
+ * A-5 owns the hook table; the throw is B-12's, whatever the hook table does.
+ */
+class TierB12ThrowingHooksAndSettingsPlugin
+{
+    /** @var string */
+    public static $module = 'b12throwboth';
+
+    /**
+     * @return array<string,array{0:string,1:string}>
+     */
+    public static function getHooks()
+    {
+        throw new \RuntimeException('hook table exploded');
+    }
+
+    /**
+     * @param \Tests\MyAdmin\Plugins\Testing\Contract\TierB12Event $event
+     * @return void
+     */
+    public static function getSettings(TierB12Event $event)
+    {
+        throw new \RuntimeException('and so did the settings handler');
     }
 }
 
@@ -491,6 +693,8 @@ class TierB12ThrowingHooksPlugin
  * A hook table whose only value is not a `[class, method]` pair. Registration is then
  * unanswerable rather than false, so claiming the handler is orphaned would be a guess —
  * Tier-A-8 owns hook value shape.
+ *
+ * Registers nothing, for the reason {@see TierB12OrphanPlugin} gives.
  */
 class TierB12MalformedHooksPlugin
 {
@@ -511,8 +715,7 @@ class TierB12MalformedHooksPlugin
      */
     public static function getSettings(TierB12Event $event)
     {
-        $settings = $event->getSubject();
-        $settings->add_text_setting(self::$module, 'General', 'b12malformed_key', 'Key', 'tip', '1');
+        $event->getSubject();
     }
 }
 
@@ -902,12 +1105,13 @@ class TierB12SettingsExecuteTest extends TestCase
     }
 
     /**
-     * Ten fleet packages declare a full `getSettings()` beside an empty hook table. Core
-     * has no path to the method, so "it registered no settings" is a complaint about a body
-     * production never runs — a claim about dead code, which is a different check's defect.
+     * Ten fleet packages declare a `getSettings()` beside an empty hook table and register
+     * nothing from it. Core has no path to the method, so "it registered no settings" is a
+     * complaint about a settings page production never renders — inconsequential, and dead
+     * code is a different check's defect.
      *
      * Skipped rather than empty: an empty result reads as a pass and would have the matrix
-     * claim coverage of a handler that was never executed.
+     * claim the plugin satisfied an assertion that was never put to it.
      *
      * @return void
      */
@@ -921,7 +1125,114 @@ class TierB12SettingsExecuteTest extends TestCase
         $this->assertFalse($findings[0]->isFailure());
         $this->assertSame('B-12', $findings[0]->assertion());
         $this->assertStringContainsString('system.settings', $findings[0]->message());
-        $this->assertStringContainsString('cannot judge it', $findings[0]->message());
+        $this->assertStringContainsString('inconsequential', $findings[0]->message());
+    }
+
+    /**
+     * The gate withholds one assertion, and only in one direction.
+     *
+     * "It registered nothing" is vacuous for a handler core cannot dispatch. "It registered
+     * something" is not: it is a fact about the body, true whatever the hook table says. So
+     * an orphan that runs clean and registers correctly is a pass, and reporting "could not
+     * run" over it would understate coverage — the same misreport as a false pass, in the
+     * other direction.
+     *
+     * @return void
+     */
+    public function testAcceptsAnOrphanedHandlerThatRegistersSettingsCleanly()
+    {
+        $findings = $this->inspector->inspect(new PluginSubject(TierB12OrphanThatRegistersPlugin::class));
+
+        $this->assertSame([], $findings, $this->describe($findings));
+    }
+
+    /**
+     * **R-3.** The bug this inspector shipped with, in one test.
+     *
+     * `getSettings()` fatals on the first line of its body, and no hook registers it. The
+     * gate used to return before `invokeArgs()`, so the throw was never observed here; B-15
+     * observed it, caught it, and deferred to this inspector on the grounds that it owned
+     * the throw. It had not run. The whole catalogue went 12 pass / 5 skip / 0 fail against
+     * this exact plugin.
+     *
+     * Assertion 1 is a property of the body. Reachability has nothing to say about it, and a
+     * fatal here is a fatal the day someone uncomments the hook.
+     *
+     * @return void
+     */
+    public function testReportsAThrowFromAnOrphanedHandler()
+    {
+        $findings = $this->inspector->inspect(new PluginSubject(TierB12FatalOrphanPlugin::class));
+
+        $this->assertCount(1, $findings, $this->describe($findings));
+        $this->assertTrue($findings[0]->isFailure(), 'a handler that fatals is a defect whether or not a hook registers it');
+        $this->assertFalse($findings[0]->isSkipped(), 'deferring here is what let the fatal through');
+        $this->assertStringContainsString('threw', $findings[0]->message());
+        $this->assertStringContainsString(
+            'tierb12_function_that_does_not_exist_anywhere',
+            $findings[0]->message(),
+            'the message must name the fatal, not merely record that one happened'
+        );
+        $this->assertSame(\Error::class, $findings[0]->context()['exception']);
+    }
+
+    /**
+     * Assertion 3 is a property of the body too: a section name is wrong in the source,
+     * before any dispatcher has an opinion about it.
+     *
+     * @return void
+     */
+    public function testReportsAStraySectionFromAnOrphanedHandler()
+    {
+        $findings = $this->inspector->inspect(new PluginSubject(TierB12StrayOrphanPlugin::class));
+
+        $this->assertCount(1, $findings, $this->describe($findings));
+        $this->assertTrue($findings[0]->isFailure());
+        $this->assertSame('b12strayorphan', $findings[0]->context()['expected']);
+        $this->assertSame('billing', $findings[0]->context()['found']);
+    }
+
+    /**
+     * The ordering, asserted directly rather than inferred from a verdict: the handler runs
+     * first, and the gate is consulted afterwards with the result in hand.
+     *
+     * Any reintroduced pre-execution gate leaves `$ran` false here, whatever verdict it
+     * happens to produce.
+     *
+     * @return void
+     */
+    public function testExecutesTheHandlerBeforeConsultingReachability()
+    {
+        TierB12OrphanRecordingPlugin::$ran = false;
+
+        $findings = $this->inspector->inspect(new PluginSubject(TierB12OrphanRecordingPlugin::class));
+
+        $this->assertTrue(
+            TierB12OrphanRecordingPlugin::$ran,
+            'the orphan skip must be reached from below invokeArgs(), not from above it'
+        );
+        $this->assertCount(1, $findings);
+        $this->assertTrue($findings[0]->isSkipped());
+        $this->assertTrue($findings[0]->context()['executed'], 'the skip must record that the body did run');
+    }
+
+    /**
+     * What the handler registered is snapshotted before the hook table is read, so reading
+     * that table cannot decide the verdict it is being consulted about.
+     *
+     * Asked in the other order, this plugin's `getHooks()` side effect would make an empty
+     * handler look like it had registered a setting, and the orphan skip would silently
+     * become a pass.
+     *
+     * @return void
+     */
+    public function testWhatTheHandlerRegisteredIsSnapshottedBeforeTheHookTableIsRead()
+    {
+        $findings = $this->inspector->inspect(new PluginSubject(TierB12HooksWithSideEffectPlugin::class));
+
+        $this->assertCount(1, $findings, $this->describe($findings));
+        $this->assertTrue($findings[0]->isSkipped(), 'a setting registered by getHooks() is not a setting the handler registered');
+        $this->assertTrue($findings[0]->context()['orphaned']);
     }
 
     /**
@@ -1052,6 +1363,24 @@ class TierB12SettingsExecuteTest extends TestCase
         $this->assertTrue($findings[0]->isSkipped());
         $this->assertSame('A-5', $findings[0]->context()['blockedBy']);
         $this->assertStringContainsString('Tier-A-5', $findings[0]->message());
+        $this->assertTrue($findings[0]->context()['executed'], 'the deferral is about assertion 2 only; the body still ran');
+    }
+
+    /**
+     * An unevaluable hook table defers assertion 2 and nothing else. A-5 reports a broken
+     * `getHooks()`; it says nothing whatever about a `getSettings()` that fatals, so
+     * deferring the throw to it would be the same empty promise the orphan gate used to make.
+     *
+     * @return void
+     */
+    public function testReportsAThrowEvenWhenTheHookTableCannotBeEvaluated()
+    {
+        $findings = $this->inspector->inspect(new PluginSubject(TierB12ThrowingHooksAndSettingsPlugin::class));
+
+        $this->assertCount(1, $findings, $this->describe($findings));
+        $this->assertTrue($findings[0]->isFailure());
+        $this->assertStringContainsString('and so did the settings handler', $findings[0]->message());
+        $this->assertArrayNotHasKey('blockedBy', $findings[0]->context(), 'A-5 does not report a throwing getSettings');
     }
 
     /**
@@ -1069,6 +1398,7 @@ class TierB12SettingsExecuteTest extends TestCase
         $this->assertTrue($findings[0]->isSkipped());
         $this->assertSame('A-8', $findings[0]->context()['blockedBy']);
         $this->assertArrayNotHasKey('orphaned', $findings[0]->context(), 'unanswerable is not the same as orphaned');
+        $this->assertTrue($findings[0]->context()['executed'], 'the deferral is about assertion 2 only; the body still ran');
     }
 
     // -----------------------------------------------------------------------

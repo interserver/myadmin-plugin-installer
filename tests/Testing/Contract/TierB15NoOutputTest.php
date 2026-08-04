@@ -10,6 +10,8 @@ namespace Tests\MyAdmin\Plugins\Testing\Contract;
 
 use MyAdmin\Plugins\Testing\Bootstrap;
 use MyAdmin\Plugins\Testing\Contract\PluginSubject;
+use MyAdmin\Plugins\Testing\Contract\TierB12SettingsExecute;
+use MyAdmin\Plugins\Testing\Contract\TierB13MenuExecute;
 use MyAdmin\Plugins\Testing\Contract\TierB15NoOutput;
 use MyAdmin\Plugins\Testing\Fakes\FakeApp;
 use MyAdmin\Plugins\Testing\Harness;
@@ -158,8 +160,9 @@ class TierB15UnbalancedBufferPlugin
 }
 
 /**
- * Throws without printing — B-12 owns the throw, so B-15 can only report that its own
- * observation is incomplete.
+ * Throws without printing. B-15 can only report that its own observation is incomplete; the
+ * throw belongs to B-12, which fails on it — a claim this file now verifies by running B-12
+ * rather than by restating it in a comment.
  */
 class TierB15ThrowingPlugin
 {
@@ -203,6 +206,62 @@ class TierB15NoHandlersPlugin
 {
     /** @var string */
     public static $module = 'b15nohandlers';
+}
+
+/**
+ * **The R-3 shape.** `getSettings()` fatals on the first line of its body, and no hook
+ * registers it.
+ *
+ * This is the plugin the deferral loop lost. B-12 skipped it as ORPHANED before executing
+ * it; B-15 executed it, caught the `Error`, and skipped on the grounds that B-12 owned the
+ * throw. Nothing was red anywhere. The deferral is only legitimate while the owner actually
+ * fails on this plugin, which is what
+ * {@see TierB15NoOutputTest::testDeferringOnASettingsThrowIsBackedByAFailureFromB12} runs
+ * B-12 to establish rather than assume.
+ */
+class TierB15OrphanFatalSettingsPlugin
+{
+    /** @var string */
+    public static $module = 'b15orphanfatal';
+
+    /**
+     * @return array<string,array{0:string,1:string}>
+     */
+    public static function getHooks()
+    {
+        return [];
+    }
+
+    /**
+     * @param \Tests\MyAdmin\Plugins\Testing\Contract\TierB15Event $event
+     * @return void
+     */
+    public static function getSettings(TierB15Event $event)
+    {
+        tierb15_function_that_does_not_exist_anywhere();
+    }
+}
+
+/**
+ * A `getMenu()` that throws without printing, so the other half of the deferral — the half
+ * B-13 owns — can be held to the same standard.
+ *
+ * `getSettings()` is deliberately absent: it keeps the finding under test down to one, and
+ * B-13 is the only owner in play.
+ */
+class TierB15ThrowingMenuPlugin
+{
+    /** @var string */
+    public static $module = 'b15throwmenu';
+
+    /**
+     * @param \Tests\MyAdmin\Plugins\Testing\Contract\TierB15Event $event
+     * @return void
+     */
+    public static function getMenu(TierB15Event $event)
+    {
+        throw new \RuntimeException('menu handler exploded before printing anything');
+    }
 }
 
 /**
@@ -336,6 +395,72 @@ class TierB15NoOutputTest extends TestCase
         $this->assertTrue($findings[0]->isSkipped(), 'an unfinished handler is an incomplete observation, not a pass');
         $this->assertNotSame([], $findings);
         $this->assertSame(\RuntimeException::class, $findings[0]->context()['exception']);
+        $this->assertSame('B-12', $findings[0]->context()['blockedBy'], 'a deferral must name who it defers to');
+        $this->assertStringContainsString(
+            'handler exploded before printing anything',
+            $findings[0]->message(),
+            'the exception message was caught and read here; discarding it is what made the old skip information-free'
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // The deferral — verified against the owner, not asserted about it
+    // -----------------------------------------------------------------------
+
+    /**
+     * **R-3.** A skip that defers is only honest while the inspector it defers to reports
+     * the defect. Until R-3 that was false and nothing noticed: B-12 gated `getSettings()`
+     * on reachability *before* executing it, so for an orphaned handler it skipped, this
+     * inspector deferred to that skip, and a plugin whose `getSettings()` fatals on line 1
+     * passed the whole catalogue 12 / 5 / 0.
+     *
+     * So the premise is executed rather than believed. Run both inspectors over one subject
+     * — the exact plugin that used to slip through — and require the owner to be red
+     * whenever this one defers. Putting any gate back in front of B-12's `invokeArgs()`
+     * turns this test red instead of quietly reopening the loop.
+     *
+     * @return void
+     */
+    public function testDeferringOnASettingsThrowIsBackedByAFailureFromB12()
+    {
+        $subject = new PluginSubject(TierB15OrphanFatalSettingsPlugin::class);
+
+        $deferrals = $this->inspector->inspect($subject);
+        $owner = (new TierB12SettingsExecute())->inspect($subject);
+
+        $this->assertCount(1, $deferrals, $this->describe($deferrals));
+        $this->assertTrue($deferrals[0]->isSkipped());
+        $this->assertSame('B-12', $deferrals[0]->context()['blockedBy']);
+
+        $this->assertCount(1, $owner, $this->describe($owner));
+        $this->assertTrue(
+            $owner[0]->isFailure(),
+            'B-15 defers the throw to B-12, so B-12 must fail on it — if it skips, the defect is reported nowhere'
+        );
+        $this->assertStringContainsString('tierb15_function_that_does_not_exist_anywhere', $owner[0]->message());
+    }
+
+    /**
+     * The same obligation for the menu half. B-13 has never had a reachability gate — it
+     * runs `getMenu()` in four panel/ACL states, one of them this inspector's admin +
+     * grant-all — so the deferral holds there today; this pins that it keeps holding.
+     *
+     * @return void
+     */
+    public function testDeferringOnAMenuThrowIsBackedByAFailureFromB13()
+    {
+        $subject = new PluginSubject(TierB15ThrowingMenuPlugin::class);
+
+        $deferrals = $this->inspector->inspect($subject);
+        $owner = (new TierB13MenuExecute())->inspect($subject);
+
+        $this->assertCount(1, $deferrals, $this->describe($deferrals));
+        $this->assertTrue($deferrals[0]->isSkipped());
+        $this->assertSame('B-13', $deferrals[0]->context()['blockedBy'], 'getMenu() is B-13\'s handler, not B-12\'s');
+
+        $this->assertNotSame([], $owner, 'B-15 defers the menu throw to B-13, so B-13 must report it');
+        $this->assertTrue($owner[0]->isFailure());
+        $this->assertStringContainsString('menu handler exploded', $owner[0]->message());
     }
 
     /**
