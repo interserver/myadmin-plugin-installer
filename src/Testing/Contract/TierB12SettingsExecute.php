@@ -78,7 +78,9 @@ use MyAdmin\Plugins\Testing\Harness;
  * thirteen false failures next to the single genuine one (`detain/myadmin-powerdns`, which
  * *does* register the handler and still registers no settings), and dead code is a different
  * defect owned by a different check. So an unregistered handler that registered nothing is a
- * {@see Finding::skipped()}, never a failure and never an empty pass. Force-executing all 13
+ * {@see Finding::notApplicable()} — never a failure, never an empty pass, and since R-4 no
+ * longer a skip either, because the handler *was* run and two of the three assertions did
+ * reach a verdict; see {@see orphaned()} for the full argument. Force-executing all 13
  * confirms the gate is load-bearing rather than decorative and that removing it would produce
  * exactly those 13 false failures: 13 of 13 register zero settings — and, equally, 0 throw,
  * 0 register into a foreign section, so opening assertions 1 and 3 to them costs nothing.
@@ -133,8 +135,9 @@ use MyAdmin\Plugins\Testing\Harness;
  * loadable class + declared + `public static` + an event {@see SubjectEvent::argumentsFor()}
  * can build, and this inspector's gate is never the narrower of the two.
  *
- * Nothing is routed through {@see Finding::notice()}: the test case reads failures and skips
- * only, so a notice would be swallowed by the consumer — the same problem one layer down.
+ * Nothing is routed through {@see Finding::notice()} either. Since R-5 the test case does read
+ * notices, so they are no longer swallowed — but a notice still never changes a matrix cell's
+ * colour, and bytes printed above `<!DOCTYPE html>` are a defect that has to.
  *
  * ---------------------------------------------------------------------------------
  * SIDE-EFFECT FREEDOM
@@ -187,7 +190,10 @@ class TierB12SettingsExecute implements PluginInspector
 
         $reflection = $subject->reflection();
         if (!$reflection->hasMethod(self::METHOD)) {
-            return [Finding::skipped(
+            // Not applicable rather than skipped: reflection answered the question, and the
+            // answer is that this package has no settings handler for the assertion to be
+            // about. Nothing here is unverified.
+            return [Finding::notApplicable(
                 self::ID,
                 'plugin declares no ' . self::METHOD . '(), so there is nothing to execute',
                 ['class' => $subject->pluginClass(), 'method' => self::METHOD]
@@ -334,7 +340,13 @@ class TierB12SettingsExecute implements PluginInspector
      *    `[class, method]` pair. "Registered" is then unanswerable rather than false, and
      *    claiming the handler is orphaned would be a guess. A-8 owns hook value shape.
      *
-     * Otherwise the handler is orphaned, and that is its own skip — see {@see orphaned()}.
+     * Those last two stay {@see Finding::skipped()} after R-4, and the `blockedBy` context key
+     * is the reason: this inspector deferred the question to another one, so it did **not**
+     * reach a verdict, and "could not run" is the literal truth about it. That is the general
+     * rule — a finding that names a `blockedBy` is always a skip, never a not-applicable.
+     *
+     * Otherwise the handler is orphaned, which is not a skip but a not-applicable — see
+     * {@see orphaned()} for why that distinction is worth the paragraph it takes to defend.
      *
      * The table is read through {@see TierA5HooksAreIdempotent::hookTable()} rather than by
      * calling `getHooks()` here, for the reason that helper exists: two inspectors that
@@ -423,7 +435,7 @@ class TierB12SettingsExecute implements PluginInspector
     }
 
     /**
-     * The skip for a handler nothing registers, which ran and registered nothing.
+     * The verdict for a handler nothing registers, which ran and registered nothing.
      *
      * Both halves of that sentence are load-bearing. The handler **was executed** — this is
      * reached from below `invokeArgs()`, so a body that fatals has already been reported as a
@@ -433,18 +445,45 @@ class TierB12SettingsExecute implements PluginInspector
      * observes it perfectly well, and the word licensed a gate that skipped the plugin before
      * running it at all.
      *
-     * Deliberately a skip carrying the orphan fact in its own message and context, rather
-     * than a skip plus a {@see Finding::notice()}. The notice would be lost, not gained:
-     * {@see \MyAdmin\Plugins\Testing\PluginContractTestCase} marks a case skipped only when
-     * `count($skips) === count($findings)`, so pairing a skip with a notice makes the case
-     * fall through to a passing assertion — turning "could not run" into "ran and was fine",
-     * which is the exact overstatement `Finding::SKIPPED` exists to prevent. `NOTICE` is also
-     * documented as existing for one catalogue case only (B-14's unreachable template), and
-     * widening it is not worth a signal that the skip reason already carries.
+     * ---------------------------------------------------------------------------------
+     * R-4: WHY THIS IS NOT-APPLICABLE AND NOT A SKIP — THE SUBTLE ONE
+     * ---------------------------------------------------------------------------------
+     * This is the least obvious of the reclassifications, because "core can never invoke this
+     * handler" reads like a *finding about dead code* rather than mere inapplicability. Three
+     * candidate verdicts, and the case against two of them:
      *
-     * `orphaned=true` is in the context, not only in the prose, so the triage matrix can key
-     * on it without parsing English — {@see Finding::describe()} renders scalar context pairs
-     * into the matrix line, so it is visible either way.
+     *  - **Failure** is wrong, and is not this inspector's to make. B-12 asserts that
+     *    `getSettings()` executes clean; it does. Dead code is a real defect and a different
+     *    one, owned by whatever check owns reachability, and turning it red here would file it
+     *    under a heading that does not describe it — the same double-attribution B-15's
+     *    docblock refuses for throws. It would also move the fleet's failure count, which is
+     *    reserved for genuine plugin bugs.
+     *  - **Skip** — what this used to be — is a false statement, and precisely the false
+     *    statement R-4 was written to eliminate. `skip` means *the check could not run*. This
+     *    check ran: it primed the process, invoked the handler, watched what it registered,
+     *    and checked the section scoping of what came back. Two of its three assertions
+     *    reached a verdict and passed. Describing that as "could not run" understates the
+     *    coverage the fleet actually has, and — worse — buries the thirteen packages where
+     *    something really could not be evaluated among cells where everything could.
+     *  - **Not applicable** is what is left, and it is not a consolation prize: assertion 2
+     *    asks "does the settings page this handler builds come out empty?", and for an
+     *    orphaned handler there is no settings page, so the question does not arise. That is
+     *    the definition of the state.
+     *
+     * The objection to answer is that `o` looks benign and dead code is not benign. True — but
+     * `-` looks equally benign *and* is factually wrong, so the change loses nothing and gains
+     * accuracy. Nor does the dead-code fact go anywhere: it is the whole content of this
+     * finding's message, the matrix prints the message for every non-passing cell, and
+     * `orphaned=true` rides in the context so a consumer can key on it without parsing English
+     * ({@see Finding::describe()} renders scalar context pairs into the matrix line).
+     *
+     * Deliberately one finding carrying the orphan fact, rather than one plus a
+     * {@see Finding::notice()}. The notice would be lost, not gained:
+     * {@see \MyAdmin\Plugins\Testing\PluginContractTestCase} buckets a case as skipped only
+     * when every finding is a skip or a not-applicable, so pairing this with a notice makes
+     * the case fall through to a passing assertion — turning "nothing was verified here" into
+     * "ran and was fine", which is the overstatement the whole severity vocabulary exists to
+     * prevent.
      *
      * @param \MyAdmin\Plugins\Testing\Contract\PluginSubject $subject
      * @param array<mixed,mixed>                             $hooks
@@ -452,7 +491,7 @@ class TierB12SettingsExecute implements PluginInspector
      */
     private function orphaned(PluginSubject $subject, array $hooks)
     {
-        return Finding::skipped(
+        return Finding::notApplicable(
             self::ID,
             sprintf(
                 '%s::%s() is ORPHANED: no hook returned by %s::getHooks() targets it, so it is'

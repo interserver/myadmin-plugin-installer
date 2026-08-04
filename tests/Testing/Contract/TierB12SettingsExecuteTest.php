@@ -1085,13 +1085,14 @@ class TierB12SettingsExecuteTest extends TestCase
     /**
      * @return void
      */
-    public function testSkipsWhenThePluginDeclaresNoHandler()
+    public function testAPluginWithNoHandlerIsNotApplicableRatherThanPassedOrSkipped()
     {
         $findings = $this->inspector->inspect(new PluginSubject(TierB12NoHandlerPlugin::class));
 
         $this->assertCount(1, $findings);
-        $this->assertTrue($findings[0]->isSkipped());
-        $this->assertNotSame([], $findings, 'a skip must not be reported as a pass');
+        $this->assertTrue($findings[0]->isNotApplicable());
+        $this->assertFalse($findings[0]->isSkipped(), 'reflection answered the question; nothing here went unrun');
+        $this->assertNotSame([], $findings, 'and it must not be reported as a pass either');
         $this->assertStringContainsString('getSettings', $findings[0]->message());
     }
 
@@ -1143,18 +1144,24 @@ class TierB12SettingsExecuteTest extends TestCase
      * complaint about a settings page production never renders — inconsequential, and dead
      * code is a different check's defect.
      *
-     * Skipped rather than empty: an empty result reads as a pass and would have the matrix
+     * Reported rather than empty: an empty result reads as a pass and would have the matrix
      * claim the plugin satisfied an assertion that was never put to it.
+     *
+     * Not-applicable rather than skipped, since R-4. The handler ran — see
+     * testExecutesTheHandlerBeforeConsultingReachability — and two of this inspector's three
+     * assertions reached a verdict on it, so "could not run" is a false statement. The
+     * argument in full is on TierB12SettingsExecute::orphaned().
      *
      * @return void
      */
-    public function testSkipsAnOrphanedHandlerRatherThanFailingIt()
+    public function testReportsAnOrphanedHandlerAsNotApplicableRatherThanFailingOrSkippingIt()
     {
         $findings = $this->inspector->inspect(new PluginSubject(TierB12OrphanPlugin::class));
 
         $this->assertCount(1, $findings);
-        $this->assertNotSame([], $findings, 'a skip must not be reported as a pass');
-        $this->assertTrue($findings[0]->isSkipped());
+        $this->assertNotSame([], $findings, 'a withheld assertion must not be reported as a pass');
+        $this->assertTrue($findings[0]->isNotApplicable());
+        $this->assertFalse($findings[0]->isSkipped(), 'the handler was executed, so the check did run');
         $this->assertFalse($findings[0]->isFailure());
         $this->assertSame('B-12', $findings[0]->assertion());
         $this->assertStringContainsString('system.settings', $findings[0]->message());
@@ -1245,8 +1252,8 @@ class TierB12SettingsExecuteTest extends TestCase
             'the orphan skip must be reached from below invokeArgs(), not from above it'
         );
         $this->assertCount(1, $findings);
-        $this->assertTrue($findings[0]->isSkipped());
-        $this->assertTrue($findings[0]->context()['executed'], 'the skip must record that the body did run');
+        $this->assertTrue($findings[0]->isNotApplicable());
+        $this->assertTrue($findings[0]->context()['executed'], 'the verdict must record that the body did run');
     }
 
     /**
@@ -1264,18 +1271,22 @@ class TierB12SettingsExecuteTest extends TestCase
         $findings = $this->inspector->inspect(new PluginSubject(TierB12HooksWithSideEffectPlugin::class));
 
         $this->assertCount(1, $findings, $this->describe($findings));
-        $this->assertTrue($findings[0]->isSkipped(), 'a setting registered by getHooks() is not a setting the handler registered');
+        $this->assertTrue(
+            $findings[0]->isNotApplicable(),
+            'a setting registered by getHooks() is not a setting the handler registered'
+        );
         $this->assertTrue($findings[0]->context()['orphaned']);
     }
 
     /**
-     * The orphaned-handler signal must survive the change from failure to skip. It is
-     * carried in the message *and* in structured context, so the triage matrix can key on
-     * `orphaned` without parsing prose.
+     * The orphaned-handler signal must survive every change of severity this finding has
+     * been through — failure, then skip, now not-applicable. It is carried in the message
+     * *and* in structured context, so the triage matrix can key on `orphaned` without parsing
+     * prose. This is the assertion that makes "`o` hides the dead-code fact" false.
      *
      * @return void
      */
-    public function testTheOrphanSkipRecordsThatTheHandlerIsDeadCode()
+    public function testTheOrphanVerdictRecordsThatTheHandlerIsDeadCode()
     {
         $findings = $this->inspector->inspect(new PluginSubject(TierB12OrphanPlugin::class));
 
@@ -1293,12 +1304,12 @@ class TierB12SettingsExecuteTest extends TestCase
      *
      * @return void
      */
-    public function testSkipsAnOrphanedHandlerWhenOtherHooksExist()
+    public function testReportsAnOrphanedHandlerAsNotApplicableWhenOtherHooksExist()
     {
         $findings = $this->inspector->inspect(new PluginSubject(TierB12PartialHooksPlugin::class));
 
         $this->assertCount(1, $findings);
-        $this->assertTrue($findings[0]->isSkipped());
+        $this->assertTrue($findings[0]->isNotApplicable());
         $this->assertTrue($findings[0]->context()['orphaned']);
         $this->assertSame(1, $findings[0]->context()['hooks']);
         $this->assertSame('function.requirements', $findings[0]->context()['hookKeys']);
@@ -1394,6 +1405,10 @@ class TierB12SettingsExecuteTest extends TestCase
 
         $this->assertCount(1, $findings);
         $this->assertTrue($findings[0]->isSkipped());
+        $this->assertFalse(
+            $findings[0]->isNotApplicable(),
+            'a finding carrying blockedBy is always a skip: this inspector reached no verdict'
+        );
         $this->assertSame('A-5', $findings[0]->context()['blockedBy']);
         $this->assertStringContainsString('Tier-A-5', $findings[0]->message());
         $this->assertTrue($findings[0]->context()['executed'], 'the deferral is about assertion 2 only; the body still ran');
@@ -1429,6 +1444,10 @@ class TierB12SettingsExecuteTest extends TestCase
 
         $this->assertCount(1, $findings);
         $this->assertTrue($findings[0]->isSkipped());
+        $this->assertFalse(
+            $findings[0]->isNotApplicable(),
+            'a finding carrying blockedBy is always a skip: this inspector reached no verdict'
+        );
         $this->assertSame('A-8', $findings[0]->context()['blockedBy']);
         $this->assertArrayNotHasKey('orphaned', $findings[0]->context(), 'unanswerable is not the same as orphaned');
         $this->assertTrue($findings[0]->context()['executed'], 'the deferral is about assertion 2 only; the body still ran');

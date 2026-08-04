@@ -59,10 +59,30 @@ use MyAdmin\Plugins\Testing\Contract\Finding;
  * WHERE THE VOCABULARY LIVES
  * ---------------------------------------------------------------------------------
  * {@see verdictFor()} is the single site that turns severities into a cell state, and
- * {@see GLYPHS} the single site that turns a cell state into a grid character. Both open
- * questions about this vocabulary — the fourth state that would separate "ran and passed"
- * from "passed without observing anything", and whether the grid legend grows a glyph —
- * are one-function changes here rather than a sweep through the renderer.
+ * {@see GLYPHS} the single site that turns a cell state into a grid character. Both were
+ * written as single sites so that the open question about this vocabulary — the fourth state
+ * separating "ran and passed" from "passed without observing anything" — could be answered
+ * with a one-function change rather than a sweep through the renderer. R-4 answered it, and
+ * it was.
+ *
+ * ---------------------------------------------------------------------------------
+ * FIVE CELL STATES
+ * ---------------------------------------------------------------------------------
+ *   `.`  {@see PASS}           — the check ran, observed something, and it was clean
+ *   `o`  {@see NOT_APPLICABLE} — the check ran; this plugin has nothing of this kind
+ *   `-`  {@see SKIP}           — the check **could not run**
+ *   `F`  {@see FAIL}           — a violation
+ *   `?`  {@see MISSING}        — no verdict was collected (a broken run, not a result)
+ *
+ * The fourth state does not originate here. It cannot: by the time a set of severities
+ * reaches {@see verdictFor()}, "found nothing of this kind" and "declined to look" are the
+ * same string unless the inspector distinguished them. It originates in
+ * {@see Finding::NOT_APPLICABLE}; this class only tabulates it.
+ *
+ * Why it was worth adding: 155 of the fleet's cells were grey, and classifying every one of
+ * them found that all 155 meant "nothing of this kind here" and none meant "could not run".
+ * The state that hides bugs was therefore perfectly camouflaged by 155 cells that were merely
+ * inapplicable. Splitting them makes the residual skip count small enough to be a worklist.
  */
 class FleetMatrix
 {
@@ -78,16 +98,40 @@ class FleetMatrix
     /** @var string no failures, but at least one inspector could not run */
     const SKIP = 'skip';
 
+    /**
+     * @var string the check ran and found nothing of its kind in this package
+     *
+     * Counted separately from {@see PASS} because a vacuous cell verifies nothing, and
+     * separately from {@see SKIP} because the check did run. See the class docblock.
+     */
+    const NOT_APPLICABLE = 'not-applicable';
+
     /** @var string the cell was never collected — a hole, not a result */
     const MISSING = 'missing';
 
-    /** @var array<string,string> grid characters, one per verdict */
+    /**
+     * @var array<string,string> grid characters, one per verdict
+     *
+     * `o` for not-applicable: visually quiet, because an inapplicable cell is not a problem,
+     * but plainly not `.` and plainly not `-`. The grid is scanned by eye for the loud
+     * glyphs, and neither `F` nor `?` may lose contrast to a state that means "nothing here".
+     */
     const GLYPHS = [
         self::PASS => '.',
         self::FAIL => '**F**',
         self::SKIP => '-',
+        self::NOT_APPLICABLE => 'o',
         self::MISSING => '**?**',
     ];
+
+    /**
+     * @var array<int,string> verdicts in report order, everywhere they are listed
+     *
+     * One list rather than four literal arrays: {@see census()}, {@see totals()} and the two
+     * renderers each used to spell it out, and a fifth state added to three of the four would
+     * have produced a document whose columns and whose headline disagreed.
+     */
+    const VERDICTS = [self::PASS, self::FAIL, self::SKIP, self::NOT_APPLICABLE, self::MISSING];
 
     /**
      * Whether a package belongs to the fleet, judged only by its composer `type`.
@@ -134,13 +178,47 @@ class FleetMatrix
     /**
      * Collapse one inspector's findings into a single cell verdict.
      *
+     * ---------------------------------------------------------------------------------
+     * PRECEDENCE: fail > skip > not-applicable > pass
+     * ---------------------------------------------------------------------------------
      * Failure dominates skip dominates pass: a cell that both failed and skipped is a
      * failure, because the skip is then a detail of how far the inspector got, not a
      * statement that nothing was learned.
      *
+     * **Not-applicable sits below skip and requires unanimity.** Two decisions there, and
+     * both go the other way from a naive precedence chain:
+     *
+     *  - *Below skip*, because `[SKIPPED, NOT_APPLICABLE]` is a cell with a coverage hole in
+     *    it. One half of the check found nothing of its kind and the other half could not
+     *    run; the reader who needs to act is the one chasing the half that could not run, and
+     *    `o` would hide it behind the state that means "no action needed". Skip is the loud
+     *    state and it wins any tie it is in.
+     *  - *Unanimous*, because {@see NOT_APPLICABLE} is a claim about the **whole cell**: this
+     *    plugin has nothing of this kind. An inspector that filed four clean observations and
+     *    one "no queue templates here" has observed plenty; rendering that cell as vacuous
+     *    would understate coverage, which is the mirror image of the overstatement the state
+     *    was introduced to fix. Mixed with anything else that is not a skip or a failure, the
+     *    cell is a pass, and the not-applicable finding is carried as an annotation exactly
+     *    as a notice is.
+     *
+     * Note that `[]` — the inspectors' pass signal — stays a {@see PASS} and does not become
+     * not-applicable. An empty result means "I checked and found nothing wrong"; an inspector
+     * that means "there was nothing to check" now has {@see Finding::notApplicable()} and must
+     * say so. Silently reinterpreting `[]` here would move the decision back out of the
+     * inspector, which is precisely what R-4 exists to stop.
+     *
      * {@see Finding::NOTICE} is intentionally not a verdict of its own. A notice is
      * additional detail about a cell that otherwise passed, and promoting it would make
      * the matrix's headline count disagree with the suite's.
+     *
+     * ---------------------------------------------------------------------------------
+     * THIS IS NOT THE PHPUNIT RULE, AND IS NOT MEANT TO BE
+     * ---------------------------------------------------------------------------------
+     * {@see \MyAdmin\Plugins\Testing\PluginContractTestCase} lands the same findings in one of
+     * PHPUnit 9's four outcomes; this method lands them in one of five cell states. The two
+     * rules are deliberately allowed to differ, and they do: PHPUnit puts not-applicable in
+     * the *skipped* bucket, because it has no fifth bucket to put it in. That collapse is
+     * acceptable in one direction only — see that class's docblock for why.
      *
      * @param array<int,string> $severities one {@see Finding} severity per finding
      * @return string one of the verdict constants (never MISSING — that is the absence of a call)
@@ -153,6 +231,9 @@ class FleetMatrix
         if (in_array(Finding::SKIPPED, $severities, true)) {
             return self::SKIP;
         }
+        if ($severities !== [] && array_values(array_unique($severities)) === [Finding::NOT_APPLICABLE]) {
+            return self::NOT_APPLICABLE;
+        }
         return self::PASS;
     }
 
@@ -161,18 +242,13 @@ class FleetMatrix
      *
      * @param array<string,array<string,mixed>> $rows see the class docblock
      * @param array<int,string> $ids catalogue ids, in report order
-     * @return array<string,array<string,int>> id => ['pass'=>int,'fail'=>int,'skip'=>int,'missing'=>int]
+     * @return array<string,array<string,int>> id => one count per {@see VERDICTS} entry
      */
     public static function census(array $rows, array $ids)
     {
         $census = [];
         foreach ($ids as $id) {
-            $census[$id] = [
-                self::PASS => 0,
-                self::FAIL => 0,
-                self::SKIP => 0,
-                self::MISSING => 0,
-            ];
+            $census[$id] = array_fill_keys(self::VERDICTS, 0);
             foreach ($rows as $row) {
                 $verdict = self::verdictAt($row, $id);
                 $census[$id][$verdict]++;
@@ -193,15 +269,9 @@ class FleetMatrix
      */
     public static function totals(array $rows, array $ids)
     {
-        $totals = [
-            'cells' => count($rows) * count($ids),
-            self::PASS => 0,
-            self::FAIL => 0,
-            self::SKIP => 0,
-            self::MISSING => 0,
-        ];
+        $totals = ['cells' => count($rows) * count($ids)] + array_fill_keys(self::VERDICTS, 0);
         foreach (self::census($rows, $ids) as $counts) {
-            foreach ([self::PASS, self::FAIL, self::SKIP, self::MISSING] as $verdict) {
+            foreach (self::VERDICTS as $verdict) {
                 $totals[$verdict] += $counts[$verdict];
             }
         }
@@ -347,13 +417,14 @@ class FleetMatrix
     {
         $totals = self::totals($rows, $ids);
         $headline = sprintf(
-            '**%d assertions x %d packages = %d cells** — %d pass, %d fail, %d skip',
+            '**%d assertions x %d packages = %d cells** — %d pass, %d fail, %d skip, %d not applicable',
             count($ids),
             count($rows),
             $totals['cells'],
             $totals[self::PASS],
             $totals[self::FAIL],
-            $totals[self::SKIP]
+            $totals[self::SKIP],
+            $totals[self::NOT_APPLICABLE]
         );
         if ($totals[self::MISSING] > 0) {
             $headline .= sprintf(
@@ -378,14 +449,26 @@ class FleetMatrix
             ."package's composer PSR-4 map, never guessed from the package name. The fleet is every\n"
             ."package whose composer `type` is `".self::SCOPE_TYPE."`.\n"
             ."\n"
-            ."A cell is `skip` when the check could not run, never when it was merely inconvenient —\n"
-            ."a skip that reads as a pass is how a matrix overstates its own coverage. A cell is\n"
-            ."`missing` when its process produced no verdict at all; that is a broken run, not a\n"
+            ."A cell is `pass` when the check ran, observed something and found it clean; `not\n"
+            ."applicable` when the check ran and this package has nothing of that kind — no routes,\n"
+            ."no `getMenu()`, no queue templates; and `skip` when the check **could not run**. Those\n"
+            ."last two were one grey dash until R-4, and all 155 of the dashes meant the harmless\n"
+            ."one, so the state that hides bugs was invisible inside the state that does not. A cell\n"
+            ."is `missing` when its process produced no verdict at all; that is a broken run, not a\n"
             ."result, and it is counted separately above rather than folded into the denominator.\n"
             ."\n";
     }
 
     /**
+     * The per-assertion tally table.
+     *
+     * The `n/a` column is unconditional, unlike `not run`. The two absences say opposite
+     * things: a table with no `not run` column is reporting the normal case, whereas a table
+     * with no `n/a` column would be indistinguishable from one produced by a generator that
+     * has never heard of the state — and "no cell was inapplicable" and "inapplicability was
+     * never measured" are exactly the pair this document exists to keep apart. Same argument
+     * as {@see renderHatches()} makes for printing its section when it is empty.
+     *
      * @param array<string,array<string,mixed>> $rows
      * @param array<int,string> $ids
      * @param array<string,string> $notes
@@ -404,11 +487,17 @@ class FleetMatrix
 
         $out = "## Census\n\n";
         $out .= $anyMissing
-            ? "| id | pass | fail | skip | not run | note |\n|---|---|---|---|---|---|\n"
-            : "| id | pass | fail | skip | note |\n|---|---|---|---|---|\n";
+            ? "| id | pass | fail | skip | n/a | not run | note |\n|---|---|---|---|---|---|---|\n"
+            : "| id | pass | fail | skip | n/a | note |\n|---|---|---|---|---|---|\n";
         foreach ($ids as $id) {
             $note = isset($notes[$id]) ? $notes[$id] : '';
-            $cols = [$id, $census[$id][self::PASS], $census[$id][self::FAIL], $census[$id][self::SKIP]];
+            $cols = [
+                $id,
+                $census[$id][self::PASS],
+                $census[$id][self::FAIL],
+                $census[$id][self::SKIP],
+                $census[$id][self::NOT_APPLICABLE],
+            ];
             if ($anyMissing) {
                 $cols[] = $census[$id][self::MISSING];
             }
@@ -534,7 +623,9 @@ class FleetMatrix
     private static function renderGrid(array $rows, array $ids)
     {
         $out = "## Grid\n\n"
-            .'`'.self::GLYPHS[self::PASS].'` pass · `F` fail · `'.self::GLYPHS[self::SKIP].'` skip · `?` not run'."\n\n"
+            .'`'.self::GLYPHS[self::PASS].'` pass · `'.self::GLYPHS[self::NOT_APPLICABLE].'` not applicable'
+            .' (ran; nothing of this kind here) · `F` fail · `'.self::GLYPHS[self::SKIP].'` skip'
+            .' (could not run) · `?` not run'."\n\n"
             .'| package | '.implode(' | ', $ids)." |\n"
             .'|---'.str_repeat('|---', count($ids))."|\n";
         foreach ($rows as $package => $row) {

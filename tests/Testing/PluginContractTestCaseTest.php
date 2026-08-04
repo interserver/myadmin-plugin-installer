@@ -605,6 +605,11 @@ class PluginContractTestCaseTest extends TestCase
             PctcInspectorPasses::class => 'pass',
             PctcInspectorOnlyNotices::class => 'notice',
             PctcInspectorOnlySkips::class => 'skip',
+            // Recorded as its own outcome even though the PHPUnit bucket is `skipped`. A G2
+            // reviewer asking what a hatch bought a package needs "the assertion did not
+            // apply" and "the assertion could not be evaluated" kept apart.
+            PctcInspectorOnlyNotApplicable::class => 'not-applicable',
+            PctcInspectorSkipsAndNotApplicable::class => 'skip',
             PctcInspectorReturnsFailure::class => 'fail',
             PctcInspectorThrows::class => 'harness-bug',
         ];
@@ -827,6 +832,118 @@ class PluginContractTestCaseTest extends TestCase
         $this->assertSame(0, $result->skippedCount(), 'a partly-runnable check did run');
         $this->assertSame(0, $result->failureCount());
         $this->assertTrue($result->wasSuccessful());
+    }
+
+    // -----------------------------------------------------------------------
+    // Not-applicable: the fourth matrix state in a four-bucket test runner
+    // -----------------------------------------------------------------------
+
+    /**
+     * PHPUnit 9 has four outcomes and the matrix now has five states, so one of them has to
+     * share. Not-applicable takes `skipped`, which means a PHPUnit reader cannot tell it from
+     * a genuine could-not-run even though the matrix can — so the *message* has to, and this
+     * pins that it does.
+     *
+     * The collapse is only ever allowed this way round: understating coverage sends a reader
+     * to look at something that was in fact fine, whereas the reverse would tell them there
+     * was nothing to look at.
+     *
+     * @return void
+     */
+    public function testAnInapplicableRunIsBucketedWithSkipsButSaysSoInItsMessage()
+    {
+        $result = $this->runContractCase(PctcCasePlain::class, PctcInspectorOnlyNotApplicable::class);
+        $message = $this->soleSkipMessage($result);
+
+        $this->assertStringContainsString('F-8', $message);
+        $this->assertStringContainsString('is not applicable to '.PctcFixturePlugin::class, $message);
+        $this->assertStringNotContainsString('could not run', $message, 'because it did run');
+        $this->assertStringContainsString('fixture has nothing of this kind', $message);
+        $this->assertStringContainsString('renders it `o`', $message, 'and the reader is told where it does show');
+    }
+
+    /**
+     * Not a pass, for the same reason a skip is not: a green cell would have the matrix claim
+     * an assertion held when nothing was put to it.
+     *
+     * @return void
+     */
+    public function testAnInapplicableRunIsNotGreen()
+    {
+        $result = $this->runContractCase(PctcCasePlain::class, PctcInspectorOnlyNotApplicable::class);
+
+        $this->assertSame(1, $result->skippedCount());
+        $this->assertSame(0, $result->failureCount());
+        $this->assertSame(0, $result->notImplementedCount(), 'incomplete belongs to notices');
+    }
+
+    /**
+     * A skip beside a not-applicable is still nothing verified, so the case is bucketed
+     * skipped — and the message keeps both halves, because the coverage hole is the half
+     * somebody has to act on.
+     *
+     * @return void
+     */
+    public function testASkipBesideAnInapplicableFindingSkipsAndDisclosesBoth()
+    {
+        $result = $this->runContractCase(PctcCasePlain::class, PctcInspectorSkipsAndNotApplicable::class);
+        $message = $this->soleSkipMessage($result);
+
+        $this->assertStringContainsString('could not run', $message, 'the hole must lead');
+        $this->assertStringContainsString('fixture reason beside an inapplicable finding', $message);
+        $this->assertStringContainsString('fixture has nothing of this kind either', $message);
+    }
+
+    /**
+     * A failure beside a not-applicable finding still fails. This is B-11's real shape — a
+     * handler that registers no routes and prints while doing it — and the fleet's 18
+     * genuine failures must not move because of a vocabulary change.
+     *
+     * @return void
+     */
+    public function testAFailureBesideAnInapplicableFindingStillFails()
+    {
+        $result = $this->runContractCase(PctcCasePlain::class, PctcInspectorNotApplicableAndFails::class);
+
+        $this->assertSame(0, $result->skippedCount());
+        $this->assertStringContainsString(
+            'fixture violation beside an inapplicable finding',
+            $this->soleFailureMessage($result)
+        );
+    }
+
+    /**
+     * A notice keeps the case out of the skipped bucket, and the inapplicable finding must
+     * not be lost on the way past — the swallowing this vocabulary's every predicate exists
+     * to prevent.
+     *
+     * @return void
+     */
+    public function testAnInapplicableFindingBesideANoticeIsDisclosedRatherThanDropped()
+    {
+        $result = $this->runContractCase(PctcCasePlain::class, PctcInspectorNoticesAndNotApplicable::class);
+        $message = $this->soleIncompleteMessage($result);
+
+        $this->assertStringContainsString('fixture observation beside an inapplicable finding', $message);
+        $this->assertStringContainsString('does not apply to this plugin', $message);
+        $this->assertStringContainsString('fixture has nothing of this kind at all', $message);
+    }
+
+    /**
+     * End-to-end through a real inspector rather than a fixture: B-13 has nothing to run
+     * against a plugin with no `getMenu()`, and says so in those words. Proves the wiring
+     * holds for something not written to make this test pass.
+     *
+     * @return void
+     */
+    public function testARealInspectorReachesTheSameInapplicableVerdict()
+    {
+        $result = $this->runContractCase(
+            PctcCasePlain::class,
+            \MyAdmin\Plugins\Testing\Contract\TierB13MenuExecute::class
+        );
+
+        $this->assertStringContainsString('B-13 is not applicable to', $this->soleSkipMessage($result));
     }
 
     // -----------------------------------------------------------------------
@@ -1096,7 +1213,10 @@ class PluginContractTestCaseTest extends TestCase
             $this->assertSame(PluginContractTestCase::SOURCE_FLEET, $entry['source']);
             $this->assertSame(PctcFixturePlugin::class, $entry['plugin']);
             $this->assertSame(['requirementRoot' => '/srv/fleet-fixture'], $entry['overrides']);
-            $this->assertContains($entry['outcome'], ['pass', 'notice', 'skip', 'fail', 'harness-bug']);
+            $this->assertContains(
+                $entry['outcome'],
+                ['pass', 'notice', 'skip', 'not-applicable', 'fail', 'harness-bug']
+            );
         }
     }
 
@@ -1399,6 +1519,95 @@ class PctcInspectorSkipsAndNotices extends PctcFixtureInspector
         return [
             Finding::skipped($this->id(), 'fixture reason beside a notice'),
             Finding::notice($this->id(), 'fixture observation'),
+        ];
+    }
+}
+
+class PctcInspectorOnlyNotApplicable extends PctcFixtureInspector
+{
+    /**
+     * @return string
+     */
+    public function id()
+    {
+        return 'F-8';
+    }
+
+    /**
+     * @param PluginSubject $subject
+     * @return array<int,Finding>
+     */
+    public function inspect(PluginSubject $subject)
+    {
+        return [Finding::notApplicable($this->id(), 'the fixture has nothing of this kind')];
+    }
+}
+
+class PctcInspectorSkipsAndNotApplicable extends PctcFixtureInspector
+{
+    /**
+     * @return string
+     */
+    public function id()
+    {
+        return 'F-8b';
+    }
+
+    /**
+     * @param PluginSubject $subject
+     * @return array<int,Finding>
+     */
+    public function inspect(PluginSubject $subject)
+    {
+        return [
+            Finding::skipped($this->id(), 'fixture reason beside an inapplicable finding'),
+            Finding::notApplicable($this->id(), 'the fixture has nothing of this kind either'),
+        ];
+    }
+}
+
+class PctcInspectorNotApplicableAndFails extends PctcFixtureInspector
+{
+    /**
+     * @return string
+     */
+    public function id()
+    {
+        return 'F-8c';
+    }
+
+    /**
+     * @param PluginSubject $subject
+     * @return array<int,Finding>
+     */
+    public function inspect(PluginSubject $subject)
+    {
+        return [
+            Finding::notApplicable($this->id(), 'the fixture has nothing of one kind'),
+            Finding::failure($this->id(), 'fixture violation beside an inapplicable finding'),
+        ];
+    }
+}
+
+class PctcInspectorNoticesAndNotApplicable extends PctcFixtureInspector
+{
+    /**
+     * @return string
+     */
+    public function id()
+    {
+        return 'F-8d';
+    }
+
+    /**
+     * @param PluginSubject $subject
+     * @return array<int,Finding>
+     */
+    public function inspect(PluginSubject $subject)
+    {
+        return [
+            Finding::notice($this->id(), 'fixture observation beside an inapplicable finding'),
+            Finding::notApplicable($this->id(), 'the fixture has nothing of this kind at all'),
         ];
     }
 }

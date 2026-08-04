@@ -390,19 +390,25 @@ class TierB13MenuExecuteTest extends TestCase
     }
 
     // -----------------------------------------------------------------------
-    // Skip paths
+    // Paths where nothing is verified — a skip and a not-applicable are not the same
     // -----------------------------------------------------------------------
 
     /**
+     * 28 of 71 fleet plugins have no menu at all. That is not a pass, and since R-4 it is not
+     * a skip either: reflection answered the question outright, so nothing about this package
+     * went unchecked. Asserting `isSkipped()` is false is the load-bearing half — it is what
+     * keeps these 28 out of the count of genuine coverage holes.
+     *
      * @return void
      */
-    public function testSkipsWhenThePluginDeclaresNoMenu()
+    public function testAPluginWithNoMenuIsNotApplicableRatherThanPassedOrSkipped()
     {
         $findings = $this->inspector->inspect(new PluginSubject(TierB13NoMenuPlugin::class));
 
         $this->assertCount(1, $findings);
-        $this->assertTrue($findings[0]->isSkipped());
-        $this->assertNotSame([], $findings, 'a skip must not be reported as a pass');
+        $this->assertTrue($findings[0]->isNotApplicable());
+        $this->assertFalse($findings[0]->isSkipped(), 'no menu is not the same as a check that could not run');
+        $this->assertNotSame([], $findings, 'and it must not be reported as a pass');
         $this->assertStringContainsString('getMenu', $findings[0]->message());
     }
 

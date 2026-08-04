@@ -1,6 +1,6 @@
 # Phase 2 — fleet triage matrix (gate G2)
 
-**17 assertions x 71 packages = 1207 cells** — 1034 pass, 18 fail, 155 skip.
+**17 assertions x 71 packages = 1207 cells** — 1034 pass, 18 fail, 5 skip, 150 not applicable.
 
 Generated — do not hand-edit. Reproduce with:
 
@@ -14,32 +14,35 @@ would let plugin *n* contaminate plugin *n+1*. Plugin classes are resolved from 
 package's composer PSR-4 map, never guessed from the package name. The fleet is every
 package whose composer `type` is `myadmin-plugin`.
 
-A cell is `skip` when the check could not run, never when it was merely inconvenient —
-a skip that reads as a pass is how a matrix overstates its own coverage. A cell is
-`missing` when its process produced no verdict at all; that is a broken run, not a
+A cell is `pass` when the check ran, observed something and found it clean; `not
+applicable` when the check ran and this package has nothing of that kind — no routes,
+no `getMenu()`, no queue templates; and `skip` when the check **could not run**. Those
+last two were one grey dash until R-4, and all 155 of the dashes meant the harmless
+one, so the state that hides bugs was invisible inside the state that does not. A cell
+is `missing` when its process produced no verdict at all; that is a broken run, not a
 result, and it is counted separately above rather than folded into the denominator.
 
 ## Census
 
-| id | pass | fail | skip | note |
-|---|---|---|---|---|
-| A-1 | 71 | 0 | 0 |  |
-| A-2 | 71 | 0 | 0 |  |
-| A-3 | 71 | 0 | 0 |  |
-| A-4 | 71 | 0 | 0 |  |
-| A-5 | 71 | 0 | 0 |  |
-| A-6 | 71 | 0 | 0 |  |
-| A-7 | 70 | 1 | 0 | cloudlinux dead hooks |
-| A-8 | 71 | 0 | 0 |  |
-| A-9 | 71 | 0 | 0 | 0 yield — regression guard |
-| B-9 | 71 | 0 | 0 | 0 yield — regression guard |
-| B-9b | 70 | 1 | 0 | cloudlinux dead hooks |
-| B-10 | 56 | 15 | 0 | dangling requirement paths |
-| B-11 | 28 | 0 | 43 | packages registering no routes cannot be checked |
-| B-12 | 56 | 1 | 14 | orphaned getSettings |
-| B-13 | 43 | 0 | 28 | packages with no getMenu() |
-| B-14 | 1 | 0 | 70 | packages with no getQueue(), or not services |
-| B-15 | 71 | 0 | 0 |  |
+| id | pass | fail | skip | n/a | note |
+|---|---|---|---|---|---|
+| A-1 | 71 | 0 | 0 | 0 |  |
+| A-2 | 71 | 0 | 0 | 0 |  |
+| A-3 | 71 | 0 | 0 | 0 |  |
+| A-4 | 71 | 0 | 0 | 0 |  |
+| A-5 | 71 | 0 | 0 | 0 |  |
+| A-6 | 71 | 0 | 0 | 0 |  |
+| A-7 | 70 | 1 | 0 | 0 | cloudlinux dead hooks |
+| A-8 | 71 | 0 | 0 | 0 |  |
+| A-9 | 71 | 0 | 0 | 0 | 0 yield — regression guard |
+| B-9 | 71 | 0 | 0 | 0 | 0 yield — regression guard |
+| B-9b | 70 | 1 | 0 | 0 | cloudlinux dead hooks |
+| B-10 | 56 | 15 | 0 | 0 | dangling requirement paths |
+| B-11 | 28 | 0 | 0 | 43 | n/a: registers no routes, or no function.requirements handler |
+| B-12 | 56 | 1 | 0 | 14 | n/a: orphaned getSettings — core can never invoke it |
+| B-13 | 43 | 0 | 0 | 28 | n/a: no getMenu() |
+| B-14 | 1 | 0 | 5 | 65 | n/a: no getQueue(), or not a service · the 5 skips are dynamic dispatch B-14 cannot read |
+| B-15 | 71 | 0 | 0 | 0 |  |
 
 ## Escape hatches
 
@@ -134,78 +137,78 @@ against the assertion as written.
 
 ## Grid
 
-`.` pass · `F` fail · `-` skip · `?` not run
+`.` pass · `o` not applicable (ran; nothing of this kind here) · `F` fail · `-` skip (could not run) · `?` not run
 
 | package | A-1 | A-2 | A-3 | A-4 | A-5 | A-6 | A-7 | A-8 | A-9 | B-9 | B-9b | B-10 | B-11 | B-12 | B-13 | B-14 | B-15 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| abuse-plugin | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | - | . |
-| amazon-payments | . | . | . | . | . | . | . | . | . | . | . | . | - | . | . | - | . |
-| authorizenet-payments | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | - | . |
-| backups-module | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | - | . |
-| cloudlinux-licensing | . | . | . | . | . | . | **F** | . | . | . | **F** | . | . | . | . | - | . |
-| cpanel-licensing | . | . | . | . | . | . | . | . | . | . | . | **F** | . | . | . | - | . |
-| cpanel-vps-addon | . | . | . | . | . | . | . | . | . | . | . | . | . | . | - | - | . |
-| cpanel-webhosting | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | - | . |
-| directadmin-licensing | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | - | . |
-| directadmin-storage | . | . | . | . | . | . | . | . | . | . | . | . | - | . | . | - | . |
-| directadmin-vps-addon | . | . | . | . | . | . | . | . | . | . | . | . | . | . | - | - | . |
-| directadmin-webhosting | . | . | . | . | . | . | . | . | . | . | . | . | - | . | . | - | . |
-| docker-vps | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | - | . |
-| domains-module | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | - | . |
-| drbl-backups | . | . | . | . | . | . | . | . | . | . | . | **F** | - | - | . | - | . |
-| fantastico-licensing | . | . | . | . | . | . | . | . | . | . | . | **F** | . | . | . | - | . |
-| fantastico-vps-addon | . | . | . | . | . | . | . | . | . | . | . | . | . | . | - | - | . |
-| floating-ips-module | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | - | . |
-| fraudrecord-plugin | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | - | . |
-| globalsign-ssl | . | . | . | . | . | . | . | . | . | . | . | . | - | . | . | - | . |
-| gluster-backups | . | . | . | . | . | . | . | . | . | . | . | **F** | - | - | . | - | . |
-| google-analytics | . | . | . | . | . | . | . | . | . | . | . | **F** | - | - | . | - | . |
-| googlecheckout-payments | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | - | . |
-| googlewallet-payments | . | . | . | . | . | . | . | . | . | . | . | **F** | - | . | . | - | . |
-| hd-vps-addon | . | . | . | . | . | . | . | . | . | . | . | . | . | . | - | - | . |
-| hotjar-analytics | . | . | . | . | . | . | . | . | . | . | . | **F** | - | - | . | - | . |
-| hyperv-vps | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | - | . |
-| icontact-mailinglist | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | - | . |
-| ip-webhosting-addon | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | - | . |
-| ips-vps-addon | . | . | . | . | . | . | . | . | . | . | . | . | . | . | - | - | . |
-| kayako-chat | . | . | . | . | . | . | . | . | . | . | . | **F** | - | - | . | - | . |
-| kayako-support | . | . | . | . | . | . | . | . | . | . | . | **F** | - | . | . | - | . |
-| ksplice-licensing | . | . | . | . | . | . | . | . | . | . | . | . | - | . | . | - | . |
-| kvm-vps | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | . | . |
-| licenses-module | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | - | . |
-| litespeed-licensing | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | - | . |
-| lxc-vps | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | - | . |
-| mail-module | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | - | . |
-| maxmind-plugin | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | - | . |
-| modernbill-plugin | . | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | . |
-| monitoring-plugin | . | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | . |
-| novnc-plugin | . | . | . | . | . | . | . | . | . | . | . | **F** | - | - | . | - | . |
-| opensrs-domains | . | . | . | . | . | . | . | . | . | . | . | . | - | . | . | - | . |
-| openvz-vps | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | - | . |
-| parallels-licensing | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | - | . |
-| patchman-licensing | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | - | . |
-| paypal-payments | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | - | . |
-| payum-payments | . | . | . | . | . | . | . | . | . | . | . | **F** | . | - | . | - | . |
-| payza-payments | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | - | . |
-| piwik-analytics | . | . | . | . | . | . | . | . | . | . | . | **F** | - | - | . | - | . |
-| plesk-webhosting | . | . | . | . | . | . | . | . | . | . | . | . | - | . | . | - | . |
-| pleskautomation-webhosting | . | . | . | . | . | . | . | . | . | . | . | . | - | . | . | - | . |
-| powerdns | . | . | . | . | . | . | . | . | . | . | . | **F** | . | **F** | . | - | . |
-| quickservers-module | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | - | . |
-| raid-backups | . | . | . | . | . | . | . | . | . | . | . | **F** | - | - | . | - | . |
-| sendy-mailinglist | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | - | . |
-| servers-module | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | - | . |
-| slack-chat | . | . | . | . | . | . | . | . | . | . | . | **F** | - | - | . | - | . |
-| softaculous-licensing | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | - | . |
-| softaculous-vps-addon | . | . | . | . | . | . | . | . | . | . | . | . | . | . | - | - | . |
-| ssl-module | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | - | . |
-| swift-backups | . | . | . | . | . | . | . | . | . | . | . | . | - | . | . | - | . |
-| virtuozzo-vps | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | - | . |
-| vps-module | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | - | . |
-| webhosting-module | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | - | . |
-| webuzo-vps | . | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | . |
-| whmsonic-licensing | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | - | . |
-| xen-vps | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | - | . |
-| zonemta-mail | . | . | . | . | . | . | . | . | . | . | . | . | - | . | . | - | . |
-| payssion-payments | . | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | . |
-| scrub-ips-module | . | . | . | . | . | . | . | . | . | . | . | . | - | . | - | - | . |
+| abuse-plugin | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | o | . |
+| amazon-payments | . | . | . | . | . | . | . | . | . | . | . | . | o | . | . | o | . |
+| authorizenet-payments | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | o | . |
+| backups-module | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | o | . |
+| cloudlinux-licensing | . | . | . | . | . | . | **F** | . | . | . | **F** | . | . | . | . | o | . |
+| cpanel-licensing | . | . | . | . | . | . | . | . | . | . | . | **F** | . | . | . | o | . |
+| cpanel-vps-addon | . | . | . | . | . | . | . | . | . | . | . | . | . | . | o | o | . |
+| cpanel-webhosting | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | o | . |
+| directadmin-licensing | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | o | . |
+| directadmin-storage | . | . | . | . | . | . | . | . | . | . | . | . | o | . | . | o | . |
+| directadmin-vps-addon | . | . | . | . | . | . | . | . | . | . | . | . | . | . | o | o | . |
+| directadmin-webhosting | . | . | . | . | . | . | . | . | . | . | . | . | o | . | . | o | . |
+| docker-vps | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | - | . |
+| domains-module | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | o | . |
+| drbl-backups | . | . | . | . | . | . | . | . | . | . | . | **F** | o | o | . | o | . |
+| fantastico-licensing | . | . | . | . | . | . | . | . | . | . | . | **F** | . | . | . | o | . |
+| fantastico-vps-addon | . | . | . | . | . | . | . | . | . | . | . | . | . | . | o | o | . |
+| floating-ips-module | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | o | . |
+| fraudrecord-plugin | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | o | . |
+| globalsign-ssl | . | . | . | . | . | . | . | . | . | . | . | . | o | . | . | o | . |
+| gluster-backups | . | . | . | . | . | . | . | . | . | . | . | **F** | o | o | . | o | . |
+| google-analytics | . | . | . | . | . | . | . | . | . | . | . | **F** | o | o | . | o | . |
+| googlecheckout-payments | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | o | . |
+| googlewallet-payments | . | . | . | . | . | . | . | . | . | . | . | **F** | o | . | . | o | . |
+| hd-vps-addon | . | . | . | . | . | . | . | . | . | . | . | . | . | . | o | o | . |
+| hotjar-analytics | . | . | . | . | . | . | . | . | . | . | . | **F** | o | o | . | o | . |
+| hyperv-vps | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | o | . |
+| icontact-mailinglist | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | o | . |
+| ip-webhosting-addon | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | o | . |
+| ips-vps-addon | . | . | . | . | . | . | . | . | . | . | . | . | . | . | o | o | . |
+| kayako-chat | . | . | . | . | . | . | . | . | . | . | . | **F** | o | o | . | o | . |
+| kayako-support | . | . | . | . | . | . | . | . | . | . | . | **F** | o | . | . | o | . |
+| ksplice-licensing | . | . | . | . | . | . | . | . | . | . | . | . | o | . | . | o | . |
+| kvm-vps | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | . | . |
+| licenses-module | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | o | . |
+| litespeed-licensing | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | o | . |
+| lxc-vps | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | - | . |
+| mail-module | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | o | . |
+| maxmind-plugin | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | o | . |
+| modernbill-plugin | . | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | . |
+| monitoring-plugin | . | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | . |
+| novnc-plugin | . | . | . | . | . | . | . | . | . | . | . | **F** | o | o | . | o | . |
+| opensrs-domains | . | . | . | . | . | . | . | . | . | . | . | . | o | . | . | o | . |
+| openvz-vps | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | - | . |
+| parallels-licensing | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | o | . |
+| patchman-licensing | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | o | . |
+| paypal-payments | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | o | . |
+| payum-payments | . | . | . | . | . | . | . | . | . | . | . | **F** | . | o | . | o | . |
+| payza-payments | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | o | . |
+| piwik-analytics | . | . | . | . | . | . | . | . | . | . | . | **F** | o | o | . | o | . |
+| plesk-webhosting | . | . | . | . | . | . | . | . | . | . | . | . | o | . | . | o | . |
+| pleskautomation-webhosting | . | . | . | . | . | . | . | . | . | . | . | . | o | . | . | o | . |
+| powerdns | . | . | . | . | . | . | . | . | . | . | . | **F** | . | **F** | . | o | . |
+| quickservers-module | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | o | . |
+| raid-backups | . | . | . | . | . | . | . | . | . | . | . | **F** | o | o | . | o | . |
+| sendy-mailinglist | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | o | . |
+| servers-module | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | o | . |
+| slack-chat | . | . | . | . | . | . | . | . | . | . | . | **F** | o | o | . | o | . |
+| softaculous-licensing | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | o | . |
+| softaculous-vps-addon | . | . | . | . | . | . | . | . | . | . | . | . | . | . | o | o | . |
+| ssl-module | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | o | . |
+| swift-backups | . | . | . | . | . | . | . | . | . | . | . | . | o | . | . | o | . |
+| virtuozzo-vps | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | - | . |
+| vps-module | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | o | . |
+| webhosting-module | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | o | . |
+| webuzo-vps | . | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | . |
+| whmsonic-licensing | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | o | . |
+| xen-vps | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | - | . |
+| zonemta-mail | . | . | . | . | . | . | . | . | . | . | . | . | o | . | . | o | . |
+| payssion-payments | . | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | . |
+| scrub-ips-module | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | o | . |

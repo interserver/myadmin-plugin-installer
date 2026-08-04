@@ -33,7 +33,29 @@ use ReflectionMethod;
  * plus a single `add_admin_page_requirement()`. The other 168 `$loader->` calls are
  * `add_requirement()`, which loads a file for a function name and registers no route at all.
  * `add_route_requirement()` is never called directly by a plugin. The remaining 42 packages
- * register nothing and are **skipped**, not passed.
+ * register nothing and are reported **not applicable**, not passed.
+ *
+ * ---------------------------------------------------------------------------------
+ * NOT-APPLICABLE, NOT SKIPPED (R-4)
+ * ---------------------------------------------------------------------------------
+ * Those 42 used to be {@see Finding::skipped()}, and that was the single largest source of
+ * the confusion R-4 fixed: `backups-module` registers neither routes nor requirement paths,
+ * and the identical fact made B-10 green and B-11 grey. A grey dash claims *the check could
+ * not run*, and this check ran perfectly well — it drove the handler, watched every
+ * `$loader->` call, and observed that none of them registered a route. Nothing is missing
+ * from the fleet's coverage because of these cells, so they must not be counted as if
+ * something were.
+ *
+ * The two empty outcomes are therefore split by *why* they are empty, and the split follows
+ * the observation, not the message:
+ *
+ *  - **not applicable** — the observation succeeded and saw no route registrations: a handler
+ *    that ran and registered none, a source scan that found no call sites, or no
+ *    `function.requirements` handler to begin with.
+ *  - **skip** — the observation itself did not complete: the class will not load, the handler
+ *    could neither be executed nor read from disk, or the scan recovered call sites whose
+ *    arguments are not literals and so could not be replayed. A route may well be registered
+ *    there; this inspector cannot say.
  *
  * ---------------------------------------------------------------------------------
  * TWO OBSERVATION MODES, ONE OBSERVATION POINT
@@ -106,10 +128,9 @@ use ReflectionMethod;
  * {@see TierA5HooksAreIdempotent} makes the identical call and reports what it prints.
  *
  * The finding is filed even when the handler registers no routes — the run is then reported
- * as a skip *and* a failure, which is honest on both counts: no routes were observed, and
- * bytes were. `Finding::notice()` is not used, because
- * {@see \MyAdmin\Plugins\Testing\PluginContractTestCase} reads failures and skips only and
- * would drop it.
+ * as not-applicable *and* a failure, which is honest on both counts: no routes were observed,
+ * and bytes were. `Finding::notice()` is not used, because a notice never changes a cell's
+ * colour, and printing above `<!DOCTYPE html>` is a defect that has to.
  *
  * `source-scan` mode executes nothing — it replays recovered call sites onto a recorder — so
  * it can print nothing and reports nothing.
@@ -155,6 +176,18 @@ class TierB11RoutesWellFormed implements PluginInspector
     const DEFAULT_HANDLER = 'getRequirements';
 
     /**
+     * The reason shared by every observation that completed and saw no routes.
+     *
+     * A constant rather than three string literals so that the three producers of it in
+     * {@see observe()} and {@see scanSource()} cannot drift into three slightly different
+     * sentences about the same fact — which, once the severity beside them differs, is how a
+     * reader stops being able to tell the two empty outcomes apart.
+     *
+     * @var string
+     */
+    const NO_ROUTES = 'plugin registers no routes';
+
+    /**
      * @return string
      */
     public function id()
@@ -183,18 +216,25 @@ class TierB11RoutesWellFormed implements PluginInspector
         }
         $handler = $this->handlerMethod($subject);
         if ($handler === null) {
-            return [Finding::skipped($this->id(), 'plugin declares no function.requirements handler', [
-                'class' => $subject->pluginClass(),
-            ])];
+            // Not a skip: there is no handler, therefore no route registration, therefore
+            // nothing of this assertion's kind in this package. The check reached a verdict.
+            return [Finding::notApplicable(
+                $this->id(),
+                'plugin declares no function.requirements handler, so it registers no routes',
+                ['class' => $subject->pluginClass()]
+            )];
         }
         $observed = $this->observe($subject, $handler);
         $findings = $this->outputFindings($subject, $handler, $observed['output']);
         if ($observed['registrations'] === []) {
-            $findings[] = Finding::skipped($this->id(), $observed['skipReason'], [
+            $context = [
                 'class' => $subject->pluginClass(),
                 'handler' => $handler,
                 'mode' => $observed['mode'],
-            ]);
+            ];
+            $findings[] = $observed['observed']
+                ? Finding::notApplicable($this->id(), $observed['emptyReason'], $context)
+                : Finding::skipped($this->id(), $observed['emptyReason'], $context);
             return $findings;
         }
         return array_merge($findings, $this->validate($observed['registrations'], $observed['mode']));
@@ -292,9 +332,15 @@ class TierB11RoutesWellFormed implements PluginInspector
     /**
      * Drives a recording loader, by execution where possible and by source scan otherwise.
      *
+     * `observed` is the R-4 severity switch for an empty result, and it is set by whichever
+     * branch produced the emptiness rather than derived from `emptyReason` afterwards. True
+     * means "the observation completed and there was nothing to see" — a not-applicable cell;
+     * false means "the observation did not complete" — a skip. Deriving it from the message
+     * would make a reworded sentence silently change a verdict.
+     *
      * @param PluginSubject $subject
      * @param string        $handler
-     * @return array{registrations:array<int,array<string,mixed>>,mode:string,skipReason:string,output:string}
+     * @return array{registrations:array<int,array<string,mixed>>,mode:string,emptyReason:string,observed:bool,output:string}
      */
     private function observe(PluginSubject $subject, $handler)
     {
@@ -303,7 +349,8 @@ class TierB11RoutesWellFormed implements PluginInspector
             return [
                 'registrations' => $executed['loader']->registrations(),
                 'mode' => 'execute',
-                'skipReason' => 'plugin registers no routes',
+                'emptyReason' => self::NO_ROUTES,
+                'observed' => true,
                 'output' => $executed['output'],
             ];
         }
@@ -345,24 +392,30 @@ class TierB11RoutesWellFormed implements PluginInspector
      *
      * @param PluginSubject $subject
      * @param string        $handler
-     * @return array{registrations:array<int,array<string,mixed>>,mode:string,skipReason:string}
+     * @return array{registrations:array<int,array<string,mixed>>,mode:string,emptyReason:string,observed:bool}
      */
     private function scanSource(PluginSubject $subject, $handler)
     {
         $file = $subject->reflection()->getFileName();
         if ($file === false || !is_file($file)) {
+            // Neither observation mode was available. This is the real "could not run".
             return [
                 'registrations' => [],
                 'mode' => 'source-scan',
-                'skipReason' => 'handler could not be executed and the plugin has no readable source file',
+                'emptyReason' => 'handler could not be executed and the plugin has no readable source file',
+                'observed' => false,
             ];
         }
         $calls = TierB11RouteCallScanner::scanFile($file);
         if ($calls === []) {
+            // The scan is an observation mode in its own right, not a degraded one — see the
+            // class docblock — so a clean scan that found no call sites is a verdict: this
+            // plugin registers no routes.
             return [
                 'registrations' => [],
                 'mode' => 'source-scan',
-                'skipReason' => 'plugin registers no routes',
+                'emptyReason' => self::NO_ROUTES,
+                'observed' => true,
             ];
         }
         $loader = new TierB11RecordingLoader();
@@ -380,9 +433,14 @@ class TierB11RoutesWellFormed implements PluginInspector
         return [
             'registrations' => $registrations,
             'mode' => 'source-scan',
-            'skipReason' => $unresolved > 0
+            // Unresolved call sites are routes this inspector knows exist and cannot read.
+            // That is a coverage hole, so it stays a skip even though the scan itself
+            // completed; "nothing of this kind here" would be a false statement about a
+            // package that demonstrably registers something.
+            'emptyReason' => $unresolved > 0
                 ? $unresolved.' route registration(s) use non-literal arguments and could not be evaluated statically'
-                : 'plugin registers no routes',
+                : self::NO_ROUTES,
+            'observed' => $unresolved === 0,
         ];
     }
 

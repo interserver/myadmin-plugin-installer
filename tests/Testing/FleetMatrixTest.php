@@ -158,6 +158,84 @@ class FleetMatrixTest extends TestCase
         $this->assertSame(FleetMatrix::FAIL, FleetMatrix::verdictFor([Finding::FAILURE, Finding::SKIPPED]));
     }
 
+    /**
+     * The fourth state, and the reason it exists: `backups-module` registers no routes and no
+     * requirement paths, and before R-4 that identical fact rendered green in one column and
+     * grey in another. Neither reading was available to this method, because both inspectors
+     * handed it a vocabulary that could not express "there was nothing of this kind".
+     *
+     * @return void
+     */
+    public function testAnEntirelyInapplicableCellIsNeitherAPassNorASkip()
+    {
+        $verdict = FleetMatrix::verdictFor([Finding::NOT_APPLICABLE, Finding::NOT_APPLICABLE]);
+
+        $this->assertSame(FleetMatrix::NOT_APPLICABLE, $verdict);
+        $this->assertNotSame(FleetMatrix::PASS, $verdict, 'a vacuous cell verifies nothing');
+        $this->assertNotSame(FleetMatrix::SKIP, $verdict, 'and the check did run');
+    }
+
+    /**
+     * Not-applicable sits *below* skip, deliberately. A cell holding both has a coverage hole
+     * in it, and the reader who has to act is the one chasing the half that could not run;
+     * rendering it `o` would hide that behind the state that means "no action needed".
+     *
+     * @return void
+     */
+    public function testASkipBesideAnInapplicableFindingIsASkip()
+    {
+        $this->assertSame(
+            FleetMatrix::SKIP,
+            FleetMatrix::verdictFor([Finding::NOT_APPLICABLE, Finding::SKIPPED])
+        );
+        $this->assertSame(
+            FleetMatrix::SKIP,
+            FleetMatrix::verdictFor([Finding::SKIPPED, Finding::NOT_APPLICABLE])
+        );
+    }
+
+    /**
+     * A failure beside an inapplicable finding is still a failure. B-11 produces exactly this
+     * pair — a handler that registers no routes but prints while doing it — and silencing one
+     * of the fleet's genuine failures is the worst thing this change could do.
+     *
+     * @return void
+     */
+    public function testAFailureBesideAnInapplicableFindingStillFails()
+    {
+        $this->assertSame(
+            FleetMatrix::FAIL,
+            FleetMatrix::verdictFor([Finding::NOT_APPLICABLE, Finding::FAILURE])
+        );
+    }
+
+    /**
+     * Unanimity is required. An inspector that made four clean observations and one "nothing
+     * of this kind here" has observed plenty, and calling that cell vacuous understates
+     * coverage — the mirror image of the overstatement the state was added to fix.
+     *
+     * @return void
+     */
+    public function testOneInapplicableFindingAmongObservationsDoesNotMakeTheCellVacuous()
+    {
+        $this->assertSame(
+            FleetMatrix::PASS,
+            FleetMatrix::verdictFor([Finding::NOT_APPLICABLE, Finding::NOTICE])
+        );
+    }
+
+    /**
+     * `[]` stays a pass. It is the inspectors' documented pass signal, and reinterpreting it
+     * here would move the decision back out of the inspector — exactly what putting the
+     * fourth state in `Finding` was for.
+     *
+     * @return void
+     */
+    public function testAnEmptyResultIsStillAPassAndNotAVacuousCell()
+    {
+        $this->assertSame(FleetMatrix::PASS, FleetMatrix::verdictFor([]));
+    }
+
     // -----------------------------------------------------------------------
     // Arithmetic
     // -----------------------------------------------------------------------
@@ -168,18 +246,30 @@ class FleetMatrixTest extends TestCase
     public function testCensusCountsEachVerdictPerAssertion()
     {
         $census = FleetMatrix::census($this->rows(), self::IDS);
+        $this->assertSame($this->counts([FleetMatrix::PASS => 2]), $census['A-1']);
         $this->assertSame(
-            [FleetMatrix::PASS => 2, FleetMatrix::FAIL => 0, FleetMatrix::SKIP => 0, FleetMatrix::MISSING => 0],
-            $census['A-1']
-        );
-        $this->assertSame(
-            [FleetMatrix::PASS => 1, FleetMatrix::FAIL => 0, FleetMatrix::SKIP => 1, FleetMatrix::MISSING => 0],
+            $this->counts([FleetMatrix::PASS => 1, FleetMatrix::SKIP => 1]),
             $census['B-9']
         );
         $this->assertSame(
-            [FleetMatrix::PASS => 1, FleetMatrix::FAIL => 1, FleetMatrix::SKIP => 0, FleetMatrix::MISSING => 0],
+            $this->counts([FleetMatrix::FAIL => 1, FleetMatrix::NOT_APPLICABLE => 1]),
             $census['B-10']
         );
+    }
+
+    /**
+     * Every state gets a count, including the ones nobody reported. A census that omitted a
+     * zero row would make "no cell was inapplicable" and "inapplicability was not measured"
+     * the same reading — the distinction this whole change is about, one level up.
+     *
+     * @return void
+     */
+    public function testTheCensusCarriesACountForEveryVerdictIncludingTheAbsentOnes()
+    {
+        $census = FleetMatrix::census($this->rows(), self::IDS);
+
+        $this->assertSame(FleetMatrix::VERDICTS, array_keys($census['A-1']));
+        $this->assertContains(FleetMatrix::NOT_APPLICABLE, array_keys($census['A-1']));
     }
 
     /**
@@ -232,9 +322,16 @@ class FleetMatrixTest extends TestCase
 
         $this->assertSame(9, $totals['cells']);
         $this->assertSame(3, $totals[FleetMatrix::MISSING]);
-        $this->assertSame(4, $totals[FleetMatrix::PASS]);
+        $this->assertSame(3, $totals[FleetMatrix::PASS]);
         $this->assertSame(1, $totals[FleetMatrix::FAIL]);
         $this->assertSame(1, $totals[FleetMatrix::SKIP]);
+        $this->assertSame(1, $totals[FleetMatrix::NOT_APPLICABLE]);
+        $this->assertSame(
+            $totals['cells'],
+            array_sum(array_intersect_key($totals, array_flip(FleetMatrix::VERDICTS))),
+            'every cell must land in exactly one state; a fifth state that nothing sums would '
+                .'shrink the denominator silently'
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -296,7 +393,7 @@ class FleetMatrixTest extends TestCase
     {
         $markdown = FleetMatrix::renderMarkdown($this->rows(), self::IDS);
         $this->assertStringContainsString(
-            '**3 assertions x 2 packages = 6 cells** — 4 pass, 1 fail, 1 skip.',
+            '**3 assertions x 2 packages = 6 cells** — 3 pass, 1 fail, 1 skip, 1 not applicable.',
             $markdown
         );
         $this->assertStringNotContainsString('NOT RUN', $markdown);
@@ -324,14 +421,33 @@ class FleetMatrixTest extends TestCase
     public function testCensusGainsANotRunColumnOnlyWhenSomethingDidNotRun()
     {
         $clean = FleetMatrix::renderMarkdown($this->rows(), self::IDS);
-        $this->assertStringContainsString('| id | pass | fail | skip | note |', $clean);
+        $this->assertStringContainsString('| id | pass | fail | skip | n/a | note |', $clean);
 
         $rows = $this->rows();
         $rows['c/three'] = ['class' => 'C', 'cells' => []];
         $this->assertStringContainsString(
-            '| id | pass | fail | skip | not run | note |',
+            '| id | pass | fail | skip | n/a | not run | note |',
             FleetMatrix::renderMarkdown($rows, self::IDS)
         );
+    }
+
+    /**
+     * The `n/a` column, unlike `not run`, is unconditional. A table without it could not be
+     * told apart from one produced before the state existed, and "no cell was inapplicable"
+     * is a measurement while "this generator never looked" is not.
+     *
+     * @return void
+     */
+    public function testTheInapplicableColumnIsPrintedEvenWhenEveryCountIsZero()
+    {
+        $rows = ['a/one' => ['class' => 'A', 'cells' => [
+            'A-1' => ['verdict' => 'pass', 'messages' => []],
+        ]]];
+
+        $markdown = FleetMatrix::renderMarkdown($rows, ['A-1']);
+
+        $this->assertStringContainsString('| id | pass | fail | skip | n/a | note |', $markdown);
+        $this->assertStringContainsString('| A-1 | 1 | 0 | 0 | 0 |  |', $markdown);
     }
 
     /**
@@ -342,8 +458,8 @@ class FleetMatrixTest extends TestCase
         $markdown = FleetMatrix::renderMarkdown($this->rows(), self::IDS, [
             'notes' => ['B-10' => 'dangling requirement paths'],
         ]);
-        $this->assertStringContainsString('| B-10 | 1 | 1 | 0 | dangling requirement paths |', $markdown);
-        $this->assertStringContainsString('| A-1 | 2 | 0 | 0 |  |', $markdown);
+        $this->assertStringContainsString('| B-10 | 0 | 1 | 0 | 1 | dangling requirement paths |', $markdown);
+        $this->assertStringContainsString('| A-1 | 2 | 0 | 0 | 0 |  |', $markdown);
     }
 
     /**
@@ -439,9 +555,32 @@ class FleetMatrixTest extends TestCase
         $rows['c/three'] = ['class' => 'C', 'cells' => []];
         $markdown = FleetMatrix::renderMarkdown($rows, self::IDS);
 
-        $this->assertStringContainsString('| one | . | . | . |', $markdown);
+        $this->assertStringContainsString('| one | . | . | o |', $markdown);
         $this->assertStringContainsString('| two | . | - | **F** |', $markdown);
         $this->assertStringContainsString('| three | **?** | **?** | **?** |', $markdown);
+    }
+
+    /**
+     * Five glyphs and their meanings, in the legend beside the grid. A reader who meets `o`
+     * for the first time has nowhere else to look, and an unexplained glyph is how a state
+     * gets read as whatever the reader already expected. The two states that are easiest to
+     * confuse — `o` and `-` — each carry their disambiguating gloss here.
+     *
+     * Asserted as one whole line rather than as five substrings: the prose above the census
+     * also contains the words "could not run", so a per-phrase assertion passes against a
+     * legend that has silently dropped them.
+     *
+     * @return void
+     */
+    public function testTheLegendExplainsEveryGlyphItCanPrint()
+    {
+        $markdown = FleetMatrix::renderMarkdown($this->rows(), self::IDS);
+
+        $this->assertStringContainsString(
+            '`.` pass · `o` not applicable (ran; nothing of this kind here)'
+                .' · `F` fail · `-` skip (could not run) · `?` not run',
+            $markdown
+        );
     }
 
     /**
@@ -551,7 +690,19 @@ class FleetMatrixTest extends TestCase
     // -----------------------------------------------------------------------
 
     /**
-     * Two packages: one clean, one with a skip and a two-finding failure.
+     * A census row with the named counts and zero for every other state.
+     *
+     * @param array<string,int> $counts
+     * @return array<string,int>
+     */
+    private function counts(array $counts)
+    {
+        return array_replace(array_fill_keys(FleetMatrix::VERDICTS, 0), $counts);
+    }
+
+    /**
+     * Two packages: one clean apart from an inapplicable cell, one with a skip and a
+     * two-finding failure.
      *
      * @return array<string,array<string,mixed>>
      */
@@ -561,7 +712,11 @@ class FleetMatrixTest extends TestCase
             'a/one' => ['class' => 'A', 'cells' => [
                 'A-1' => ['verdict' => 'pass', 'messages' => []],
                 'B-9' => ['verdict' => 'pass', 'messages' => []],
-                'B-10' => ['verdict' => 'pass', 'messages' => []],
+                // Not a pass: this package registers nothing B-10 could check. Carried in the
+                // shared fixture rather than a private one so the arithmetic, the census
+                // columns, the headline and the grid are all exercised against a fleet that
+                // contains the fourth state — which the real fleet does, 187 times.
+                'B-10' => ['verdict' => 'not-applicable', 'messages' => ['[B-10] registers no requirement paths']],
             ]],
             'b/two' => ['class' => 'B', 'cells' => [
                 'A-1' => ['verdict' => 'pass', 'messages' => []],

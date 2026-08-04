@@ -17,9 +17,32 @@ use Throwable;
  * ---------------------------------------------------------------------------------
  * SCOPE
  * ---------------------------------------------------------------------------------
- * Applies to `$type === 'service'` plugins that declare a `getQueue()`. Eight of the 69
- * plugins do. Everything else returns {@see Finding::skipped()} — never `[]`, because a skip
- * that reads as a pass is how a triage matrix claims coverage it does not have.
+ * Applies to `$type === 'service'` plugins that declare a `getQueue()`. Seven of the 71
+ * plugins do. Everything else returns a {@see Finding} — never `[]`, because an empty result
+ * is the pass signal, and a vacuous cell that reads as a pass is how a triage matrix claims
+ * coverage it does not have.
+ *
+ * ---------------------------------------------------------------------------------
+ * WHICH FINDING — THE SPLIT R-4 ADDED
+ * ---------------------------------------------------------------------------------
+ * This inspector produced 70 of the fleet's 155 grey cells, and they were not all grey for
+ * the same reason. Two kinds:
+ *
+ *  - **{@see Finding::notApplicable()}** — the check reached a verdict and there is nothing of
+ *    its kind here. A plugin that is not a service, a service with no `getQueue()`, or a
+ *    `getQueue()` the scanner read cleanly and found renders no `*.sh.tpl` at all. Nothing is
+ *    unverified about these packages; there is simply no queue-template surface to verify.
+ *  - **{@see Finding::skipped()}** — the check could not run. A class that will not load, a
+ *    handler with no readable source, a token scan that desynchronised, a render directory
+ *    that is not recoverable, and — the one that matters most — a handler that *does* render
+ *    templates but selects them from queue data and names no action literally.
+ *
+ * That last case is the reason this inspector does not go to zero skips. It looks like the
+ * others (an empty result, no failure to report) and it is categorically different: those
+ * packages have a queue-template surface, it is one of the largest in the fleet, and B-14
+ * cannot see it. Rendering that `o` would be exactly the camouflage R-4 removed — a genuine
+ * blind spot hidden inside a crowd of harmless ones. It stays `-`, and the residual skip
+ * count on this row is the size of the blind spot rather than the size of the fleet.
  *
  * ---------------------------------------------------------------------------------
  * THE TWO DIRECTIONS
@@ -32,7 +55,7 @@ use Throwable;
  *    which by construction never fails a build.
  *
  * The unreachable direction is reported **only when the dispatch is closed** — that is, when
- * the handler builds template names purely from literals. Six of the eight handlers instead
+ * the handler builds template names purely from literals. Five of the seven handlers instead
  * build the path as `__DIR__.'/../templates/'.$serviceInfo['action'].'.sh.tpl'`, where the
  * action comes from the queue row. Under that dispatch *every* file in the directory is
  * reachable by definition, so emitting "unreachable" notices would mean 27 false notices on
@@ -61,8 +84,11 @@ use Throwable;
  * See {@see TierB14QueueActionScanner} for the three extraction rules and their documented
  * false negatives. The consequence here is that when the dispatch is dynamic *and* the
  * handler names no action literally, there is nothing to cross-check and the result is a
- * skip carrying that reason — not a pass. On today's fleet that is the outcome for six of
- * the eight, which is an honest statement of what B-14 can see rather than six green cells.
+ * skip carrying that reason — not a pass, and after R-4 not a not-applicable either. On
+ * today's fleet that is the outcome for five of the seven — docker, lxc, openvz, virtuozzo
+ * and xen — which is an honest statement of what B-14 can see rather than five green cells.
+ * Those five are also the entire residual skip count on this row, and on the fleet: the other
+ * 65 cells in this column are packages with no queue-template surface at all.
  *
  * ---------------------------------------------------------------------------------
  * TWO SKIPS THAT LOOK REDUNDANT AND ARE NOT
@@ -118,9 +144,10 @@ class TierB14TemplateCompleteness implements PluginInspector
      *
      * A parse failure and "there was genuinely nothing to cross-check" used to render as the
      * same skip, so a silently truncated scan was indistinguishable from a handler that
-     * dispatches on queue data. `Finding::NOTICE` would be the natural severity for the
-     * difference, but it is currently collected by no consumer, so the distinction is
-     * carried in the reason text where `grep` can find it across a fleet run.
+     * dispatches on queue data. Both are still skips — both really are "could not run" — so
+     * the R-4 severity split does not separate them either, and the distinction stays in the
+     * reason text where `grep` can find it across a fleet run. What R-4 did buy is that these
+     * two are now the *only* things on this row wearing a dash, instead of two among seventy.
      *
      * @var string
      */
@@ -155,14 +182,16 @@ class TierB14TemplateCompleteness implements PluginInspector
         }
         $type = $this->type($subject);
         if ($type !== self::SERVICE_TYPE) {
-            return [Finding::skipped(
+            // Out of scope by declaration, not unverifiable: a non-service plugin has no queue
+            // for templates to belong to. See the class docblock on the R-4 split.
+            return [Finding::notApplicable(
                 $this->id(),
                 'plugin type is '.($type === null ? 'undeclared' : '"'.$type.'"').', not "'.self::SERVICE_TYPE.'"',
                 ['class' => $subject->pluginClass()]
             )];
         }
         if (!$subject->reflection()->hasMethod(self::QUEUE_METHOD)) {
-            return [Finding::skipped($this->id(), 'plugin declares no '.self::QUEUE_METHOD.'() handler', [
+            return [Finding::notApplicable($this->id(), 'plugin declares no '.self::QUEUE_METHOD.'() handler', [
                 'class' => $subject->pluginClass(),
             ])];
         }
@@ -185,7 +214,10 @@ class TierB14TemplateCompleteness implements PluginInspector
         }
         $dispatches = TierB14QueueActionScanner::templateDispatches($source);
         if ($dispatches === []) {
-            return [Finding::skipped(
+            // Reached only after scanDesyncs() came back clean, so the scan is trustworthy and
+            // this is a verdict rather than a shrug: the handler renders no shell templates,
+            // so there is no template set for the assertion to cross-check.
+            return [Finding::notApplicable(
                 $this->id(),
                 self::QUEUE_METHOD.'() does not render '.self::TEMPLATE_GLOB.' templates',
                 ['class' => $subject->pluginClass()]
@@ -294,6 +326,12 @@ class TierB14TemplateCompleteness implements PluginInspector
         $actions = TierB14QueueActionScanner::actionLiterals($source);
         $present = $this->templateNames($directory);
         if ($actions === [] && $dynamic) {
+            // DELIBERATELY still a skip after R-4, and the only branch of this inspector that
+            // is. Everything of B-14's kind is present here — a service, a queue handler, a
+            // template directory, often dozens of templates — and this inspector cannot read
+            // the action set that would let it check any of them. That is a coverage hole, not
+            // an inapplicable assertion, and calling it `o` would hide the fleet's largest
+            // queue surfaces inside the crowd of packages that simply have no queue.
             return [Finding::skipped(
                 $this->id(),
                 self::QUEUE_METHOD.'() selects templates from queue data and names no action literally, so there is '

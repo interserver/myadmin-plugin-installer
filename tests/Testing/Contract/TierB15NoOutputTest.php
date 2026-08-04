@@ -556,12 +556,16 @@ class TierB15NoOutputTest extends TestCase
     /**
      * @return void
      */
-    public function testSkipsWhenNeitherHandlerExists()
+    public function testAPluginWithNeitherHandlerIsNotApplicableRatherThanSkipped()
     {
         $findings = $this->inspector->inspect(new PluginSubject(TierB15NoHandlersPlugin::class));
 
         $this->assertCount(1, $findings);
-        $this->assertTrue($findings[0]->isSkipped());
+        $this->assertTrue($findings[0]->isNotApplicable());
+        $this->assertFalse(
+            $findings[0]->isSkipped(),
+            'there is no handler whose output could be observed, which is not the same as failing to observe one'
+        );
         $this->assertStringContainsString('getSettings', $findings[0]->message());
     }
 

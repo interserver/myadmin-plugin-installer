@@ -65,9 +65,10 @@ use ReflectionMethod;
  * one defect in two matrix cells, which is what the deferral in B-15's docblock refuses to do
  * for throws and refuses symmetrically here.
  *
- * `Finding::notice()` is not the compromise it looks like:
- * {@see \MyAdmin\Plugins\Testing\PluginContractTestCase} reads failures and skips only, so a
- * notice is dropped by the consumer — swallowed evidence, one layer further down.
+ * `Finding::notice()` is not the compromise it looks like. Since R-5 the test case does read
+ * notices, so nothing is swallowed any more — but a notice still leaves the matrix cell the
+ * colour it would have been, and one defect reported in two columns is the thing being
+ * avoided, not one defect reported quietly.
  *
  * ---------------------------------------------------------------------------------
  * ORDERING AND ISOLATION
@@ -135,9 +136,12 @@ class TierB13MenuExecute implements PluginInspector
 
         $reflection = $subject->reflection();
         if (!$reflection->hasMethod(self::METHOD)) {
-            // 27 of 69 plugins genuinely have no menu. That is not a pass — an empty
-            // result here would let the matrix claim coverage it does not have.
-            return [Finding::skipped(
+            // 28 of 71 plugins genuinely have no menu. That is not a pass — an empty result
+            // here would let the matrix claim coverage it does not have — and since R-4 it is
+            // not a skip either. A skip claims the check could not run; reflection answered
+            // the question outright, and the answer is that this package has no menu handler
+            // for the assertion to be about. See Finding::NOT_APPLICABLE.
+            return [Finding::notApplicable(
                 self::ID,
                 'plugin declares no ' . self::METHOD . '(), so there is nothing to execute',
                 ['class' => $subject->pluginClass(), 'method' => self::METHOD]

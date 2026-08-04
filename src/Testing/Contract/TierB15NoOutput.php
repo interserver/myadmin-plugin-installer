@@ -103,9 +103,11 @@ use Throwable;
  * without naming a reporter. Those four sites are the remainder of R-8 and were outside the
  * file scope this pass was made under. The fix for each is mechanical: route the call through
  * `hookTable()`, or wrap it in {@see capture()} and discard on A-5's argument.
- * `Finding::notice()` is not an option for any of them: {@see \MyAdmin\Plugins\Testing\PluginContractTestCase}
- * reads only failures and skips, so a notice is discarded by the consumer — swallowing
- * again, one level further down still.
+ * `Finding::notice()` is not an option for any of them: since R-5
+ * {@see \MyAdmin\Plugins\Testing\PluginContractTestCase} does read notices, so nothing is
+ * discarded by the consumer any more — but a notice still leaves the matrix cell whatever
+ * colour it already was, and bytes printed above `<!DOCTYPE html>` are a defect that has to
+ * change it.
  *
  * ---------------------------------------------------------------------------------
  * FOUR MENU STATES, BECAUSE THE OWNER MUST NOT SEE LESS THAN THE DISCARDER
@@ -132,6 +134,16 @@ use Throwable;
  * ---------------------------------------------------------------------------------
  * A handler that throws before finishing was only partly observed, so "it emitted no
  * output" would be a claim about a body that never ran to the end: a skip, not a pass.
+ *
+ * **R-4 changed nothing here, and the review's proposal to give the deferral a state of its
+ * own was declined.** A deferral is a genuine "could not run": the rest of the handler's body
+ * was never executed, so this inspector holds no verdict about it, and that is exactly what
+ * {@see Finding::SKIPPED} means. It is not {@see Finding::NOT_APPLICABLE} — there is a handler
+ * here, of precisely this assertion's kind, and it was not fully observed. A fifth severity
+ * would buy nothing the finding does not already carry: R-3 made the deferral a skip carrying
+ * `blockedBy` plus the exception message, which is machine-readable, names the owning column,
+ * and is more precise than a glyph could be. The general rule this case anchors: a finding
+ * carrying `blockedBy` is always a skip.
  * The throw itself is not this inspector's finding — B-15 is "handlers emit no direct
  * output", and turning it red for a fatal would file the defect under the wrong heading
  * and paint one bug into two matrix columns.
@@ -217,7 +229,10 @@ class TierB15NoOutput implements PluginInspector
             }
         }
         if ($present === []) {
-            return [Finding::skipped(
+            // Not a skip: reflection answered the question and there is no handler here whose
+            // output could be observed. Contrast the deferral in runMethod(), which is a skip
+            // precisely because there *is* a handler and its body was only partly observed.
+            return [Finding::notApplicable(
                 self::ID,
                 'plugin declares neither ' . self::SETTINGS_METHOD . '() nor ' . self::MENU_METHOD . '()',
                 ['class' => $subject->pluginClass()]

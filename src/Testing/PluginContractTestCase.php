@@ -102,6 +102,35 @@ use Throwable;
  * Incomplete is the only remaining bucket that is visible in the default report, distinct
  * from pass, fail and skip, and non-fatal.
  *
+ * ---------------------------------------------------------------------------------
+ * HOW NOT-APPLICABLE RENDERS — AND THE ONE LOSSY DIRECTION (R-4)
+ * ---------------------------------------------------------------------------------
+ * {@see Finding::NOT_APPLICABLE} means "the inspector ran and this plugin has nothing of this
+ * kind": no routes, no `getMenu()`, no queue templates. It is a fourth *matrix* state. It is
+ * **not** a fourth PHPUnit outcome, because PHPUnit 9 has only four and notices already took
+ * `incomplete`. It lands in **`skipped`**, alongside genuine could-not-runs.
+ *
+ * So the matrix can tell those two apart and a PHPUnit reader cannot. That is worth stating
+ * plainly rather than leaving for someone to discover from a confusing `S`:
+ *
+ *  - The message says which it is. A not-applicable run reads "X is not applicable to Y",
+ *    a skipped one reads "X could not run against Y", and a run mixing the two says both.
+ *    The distinction survives into the text even where the bucket cannot carry it.
+ *  - **The collapse is acceptable in one direction only.** Reporting not-applicable as
+ *    `skipped` understates coverage: a reader believes a check did not run when it did, and
+ *    the correction is to look. Reporting a genuine skip as not-applicable would do the
+ *    opposite — tell the reader there is nothing to look at — and that is the misreport this
+ *    whole fourth state was introduced to remove. Nothing here may ever collapse that way.
+ *  - The G2 artefact is the fleet matrix, not a PHPUnit summary, and it keeps the states
+ *    apart. A repo's own run is a pass/fail gate; the matrix is the coverage record.
+ *
+ * The skip branch's unanimity rule extends to cover both severities together: a case is
+ * bucketed `skipped` when *every* finding is a skip or a not-applicable. It is deliberately
+ * **not** the matrix rule, which puts a `[skip, not-applicable]` cell in `skip` and requires
+ * unanimity for `o`. The two answer different questions — "which of four buckets is this
+ * whole test in?" versus "what does this one cell claim?" — and were always allowed to
+ * differ; see {@see \MyAdmin\Plugins\Testing\FleetMatrix::verdictFor()}.
+ *
  * The contract assertion is recorded *before* the test is marked incomplete. PHPUnit 9
  * routes an incomplete test through the same branch of `TestResult::run()` that suppresses
  * the "did not perform any assertions" check, so today that ordering is belt-and-braces
@@ -303,6 +332,7 @@ abstract class PluginContractTestCase extends TestCase
         $failures = [];
         $skips = [];
         $notices = [];
+        $inapplicable = [];
         foreach ($findings as $finding) {
             if ($finding->isFailure()) {
                 $failures[] = $finding->describe();
@@ -310,6 +340,8 @@ abstract class PluginContractTestCase extends TestCase
                 $skips[] = $finding->describe();
             } elseif ($finding->isNotice()) {
                 $notices[] = $finding->describe();
+            } elseif ($finding->isNotApplicable()) {
+                $inapplicable[] = $finding->describe();
             }
         }
 
@@ -331,25 +363,32 @@ abstract class PluginContractTestCase extends TestCase
             );
         }
 
-        // A check that could not run is not a check that passed. Reporting it as a skip
-        // keeps the triage matrix honest about its own coverage.
+        // A check that could not run is not a check that passed, and neither is a check that
+        // had nothing to look at. Both are bucketed `skipped`, because PHPUnit 9 has four
+        // outcomes and `incomplete` is already spoken for; the message says which one this is,
+        // and the class docblock records why the collapse is only ever allowed this way round.
         //
-        // DELIBERATE: the test is "EVERY finding is a skip", not "every finding is a skip or
-        // a notice". A skip alongside a NOTICE therefore does NOT skip the test. That looks
+        // DELIBERATE: the test is "EVERY finding is a skip or a not-applicable", not "...or a
+        // notice". A skip alongside a NOTICE therefore does NOT skip the test. That looks
         // like it buries the skip, and it was changed once on that reasoning and changed back:
         //   - A notice is an OBSERVATION. Emitting one proves the inspector ran and had
         //     something to report, so "could not run" would be a false statement about it.
         //     Understating coverage is still misreporting it.
         //   - Nothing is actually lost. The fleet triage matrix derives each cell straight
-        //     from the findings with fail > skip > pass, so a skip is rendered as a skip in
-        //     the G2 artefact whatever this method decides. Only the PHPUnit bucket differs.
-        //     The notice now carries the skip into the incomplete message below, so the
-        //     PHPUnit reader does not lose it either.
-        // Pinned by PluginContractTestCaseTest::testASkipAlongsideANoticeDoesNotSkipTheTest.
-        if ($skips !== [] && count($skips) === count($findings)) {
+        //     from the findings, so a skip is rendered as a skip in the G2 artefact whatever
+        //     this method decides. Only the PHPUnit bucket differs. The notice now carries the
+        //     skip into the incomplete message below, so the PHPUnit reader does not lose it
+        //     either.
+        // A not-applicable is admitted to this branch where a notice is not, because it is not
+        // an observation about the plugin's behaviour — it is the statement that there was no
+        // behaviour of this kind to observe. Grouped with a skip it makes the same claim a
+        // skip does: nothing here was verified.
+        // Pinned by PluginContractTestCaseTest::testASkipAlongsideANoticeDoesNotSkipTheTest
+        // and ::testAnInapplicableRunIsBucketedWithSkipsButSaysSoInItsMessage.
+        if (($skips !== [] || $inapplicable !== [])
+            && count($skips) + count($inapplicable) === count($findings)) {
             $this->markTestSkipped(
-                $inspector->id().' could not run against '.$subject->pluginClass().': '
-                .implode('; ', $skips)
+                $this->describeUnverified($inspector, $subject, $skips, $inapplicable)
                 ."\n".$this->describeOverrides($subject)
             );
             return;
@@ -361,8 +400,43 @@ abstract class PluginContractTestCase extends TestCase
         $this->assertSame([], $failures, $inspector->id().' reported no contract violations');
 
         if ($notices !== []) {
-            $this->markTestIncomplete($this->describeNotices($inspector, $subject, $notices, $skips));
+            $this->markTestIncomplete(
+                $this->describeNotices($inspector, $subject, $notices, $skips, $inapplicable)
+            );
         }
+    }
+
+    /**
+     * The skipped-run message, for a case in which nothing was verified.
+     *
+     * Two reasons produce that outcome and they are not the same reason, so the sentence says
+     * which one applies. PHPUnit's bucket cannot: `S` is `S`. The text is the only channel the
+     * distinction has on this side, which is why it is built here rather than inlined at the
+     * call site where the next edit would flatten it back into one wording.
+     *
+     * @param \MyAdmin\Plugins\Testing\Contract\PluginInspector $inspector
+     * @param \MyAdmin\Plugins\Testing\Contract\PluginSubject   $subject
+     * @param array<int,string>                                 $skips        could-not-run reasons
+     * @param array<int,string>                                 $inapplicable nothing-of-this-kind reasons
+     * @return string
+     */
+    protected function describeUnverified($inspector, PluginSubject $subject, array $skips, array $inapplicable)
+    {
+        if ($inapplicable === []) {
+            return $inspector->id().' could not run against '.$subject->pluginClass().': '
+                .implode('; ', $skips);
+        }
+        if ($skips === []) {
+            return $inspector->id().' is not applicable to '.$subject->pluginClass().': '
+                .implode('; ', $inapplicable)
+                .' — the check ran and this plugin has nothing of this kind, which is not the same'
+                .' as the check being unable to run. PHPUnit has no bucket of its own for that, so'
+                .' it is reported here as skipped; the fleet triage matrix renders it `o`, not `-`.';
+        }
+        return $inspector->id().' could not run against '.$subject->pluginClass().': '
+            .implode('; ', $skips)
+            ."\nSeparately, part of this assertion does not apply to this plugin at all: "
+            .implode('; ', $inapplicable);
     }
 
     /**
@@ -373,10 +447,17 @@ abstract class PluginContractTestCase extends TestCase
      * @param \MyAdmin\Plugins\Testing\Contract\PluginSubject   $subject
      * @param array<int,string>                                 $notices
      * @param array<int,string>                                 $skips
+     * @param array<int,string>                                 $inapplicable defaulted so the
+     *        signature stays compatible with a repo that overrode this hook before R-4
      * @return string
      */
-    protected function describeNotices($inspector, PluginSubject $subject, array $notices, array $skips)
-    {
+    protected function describeNotices(
+        $inspector,
+        PluginSubject $subject,
+        array $notices,
+        array $skips,
+        array $inapplicable = []
+    ) {
         $message = $inspector->id().' — '.$inspector->title()."\n"
             .$subject->pluginClass().' satisfies this assertion. Reported as incomplete rather than'
             ." passed so these observations are not lost in a green run — none of them is a contract"
@@ -384,6 +465,13 @@ abstract class PluginContractTestCase extends TestCase
             .implode("\n  - ", $notices)."\n";
         if ($skips !== []) {
             $message .= "Part of the check could not run:\n  - ".implode("\n  - ", $skips)."\n";
+        }
+        // Carried for the same reason the skips are: this branch is the one that runs when a
+        // notice keeps the case out of the skipped bucket, and anything not repeated here is
+        // reported nowhere a PHPUnit reader will see it.
+        if ($inapplicable !== []) {
+            $message .= "Part of the check does not apply to this plugin:\n  - "
+                .implode("\n  - ", $inapplicable)."\n";
         }
         return $message.$this->describeOverrides($subject);
     }
@@ -519,9 +607,10 @@ abstract class PluginContractTestCase extends TestCase
      *  - `source`    — {@see SOURCE_PHPUNIT} for a repo's own run, {@see SOURCE_FLEET} for
      *                  {@see inspectAll()};
      *  - `assertion` — the catalogue id whose run this was;
-     *  - `outcome`   — `pass`, `notice`, `skip`, `fail` or `harness-bug`. `pass` alongside a
-     *                  hatch is the entry a G2 reviewer is looking for: a green cell reached
-     *                  under a relaxed contract;
+     *  - `outcome`   — `pass`, `notice`, `skip`, `not-applicable`, `fail` or `harness-bug`.
+     *                  `pass` alongside a hatch is the entry a G2 reviewer is looking for: a
+     *                  green cell reached under a relaxed contract. `not-applicable` is the
+     *                  next most interesting: a hatch that made an assertion stop applying;
      *  - `overrides` — hatch name to the value the subject held.
      *
      * @return array<int,array<string,mixed>>
@@ -572,17 +661,25 @@ abstract class PluginContractTestCase extends TestCase
      * The verdict a set of findings produces, in the same precedence the test body uses.
      *
      * Shared so the ledger cannot drift from the PHPUnit bucket it claims to describe.
-     * Note this is **not** the matrix cell rule: the matrix collapses `notice` into `pass`
-     * and reports `[skip, notice]` as a skip, deliberately, because a cell has three colours
-     * and a PHPUnit run has four outcomes.
+     * Note this is **not** the matrix cell rule: the matrix collapses `notice` into `pass`,
+     * reports `[skip, notice]` as a skip and requires unanimity before it will call a cell
+     * not-applicable, all deliberately, because a cell has five states and a PHPUnit run has
+     * four outcomes.
+     *
+     * `not-applicable` is reported here as its own outcome even though the PHPUnit bucket it
+     * lands in is `skipped`. The ledger is read by a G2 reviewer asking "what did this escape
+     * hatch buy the package?", and "the assertion did not apply" and "the assertion could not
+     * be evaluated" are different answers to that question. Flattening them into `skip` here
+     * would throw away, in the audit record, exactly the distinction R-4 added.
      *
      * @param array<int,\MyAdmin\Plugins\Testing\Contract\Finding> $findings
-     * @return string
+     * @return string one of pass / notice / skip / not-applicable / fail
      */
     protected static function outcomeOf(array $findings)
     {
         $skips = 0;
         $notices = 0;
+        $inapplicable = 0;
         foreach ($findings as $finding) {
             if ($finding->isFailure()) {
                 return 'fail';
@@ -591,10 +688,12 @@ abstract class PluginContractTestCase extends TestCase
                 $skips++;
             } elseif ($finding->isNotice()) {
                 $notices++;
+            } elseif ($finding->isNotApplicable()) {
+                $inapplicable++;
             }
         }
-        if ($skips > 0 && $skips === count($findings)) {
-            return 'skip';
+        if ($skips + $inapplicable > 0 && $skips + $inapplicable === count($findings)) {
+            return $skips > 0 ? 'skip' : 'not-applicable';
         }
         return $notices > 0 ? 'notice' : 'pass';
     }

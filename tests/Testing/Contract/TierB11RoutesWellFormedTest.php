@@ -8,6 +8,7 @@ use MyAdmin\Plugins\Testing\Contract\PluginSubject;
 use MyAdmin\Plugins\Testing\Contract\TierB11RecordingLoader;
 use MyAdmin\Plugins\Testing\Contract\TierB11RouteCallScanner;
 use MyAdmin\Plugins\Testing\Contract\TierB11RoutesWellFormed;
+use MyAdmin\Plugins\Testing\FleetMatrix;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -298,16 +299,25 @@ class TierB11RoutesWellFormedTest extends TestCase
         $this->assertStringContainsString('[class, method] pair', $failures[0]->message());
     }
 
-    public function testPluginWithNoRequirementsHandlerIsSkippedRatherThanPassed(): void
+    /**
+     * Neither a pass nor a skip (R-4). No handler means no route registration means nothing of
+     * B-11's kind in this package, and the check established that rather than failing to.
+     */
+    public function testPluginWithNoRequirementsHandlerIsNotApplicableRatherThanPassedOrSkipped(): void
     {
         $findings = $this->inspect($this->makeHandlerlessPlugin());
 
         $this->assertCount(1, $findings);
-        $this->assertTrue($findings[0]->isSkipped(), 'a plugin with no handler must not read as a pass');
+        $this->assertTrue($findings[0]->isNotApplicable(), 'a plugin with no handler must not read as a pass');
+        $this->assertFalse($findings[0]->isSkipped(), 'nor as a check that could not run');
         $this->assertStringContainsString('no function.requirements handler', $findings[0]->message());
     }
 
-    public function testPluginThatRegistersOnlyRequirementsIsSkippedRatherThanPassed(): void
+    /**
+     * The handler ran, every `$loader->` call was watched, and none of them registered a
+     * route. That is an observation, so the cell is `o` and not `-`.
+     */
+    public function testPluginThatRegistersOnlyRequirementsIsNotApplicableRatherThanPassedOrSkipped(): void
     {
         $class = $this->makePlugin(
             "        \$loader->add_requirement('class.Thing', '/src/Thing.php');"
@@ -316,7 +326,8 @@ class TierB11RoutesWellFormedTest extends TestCase
         $findings = $this->inspect($class);
 
         $this->assertCount(1, $findings);
-        $this->assertTrue($findings[0]->isSkipped());
+        $this->assertTrue($findings[0]->isNotApplicable());
+        $this->assertFalse($findings[0]->isSkipped());
         $this->assertSame('plugin registers no routes', $findings[0]->message());
     }
 
@@ -415,7 +426,13 @@ class TierB11RoutesWellFormedTest extends TestCase
         );
     }
 
-    public function testNonLiteralArgumentsAreSkippedRatherThanPassed(): void
+    /**
+     * Stays a skip after R-4, and the contrast with the test below is the whole point of the
+     * fourth state. Here the scan found a route registration and could not read it: a route
+     * may well exist and this inspector cannot say, which is a coverage hole. There, the scan
+     * read the source cleanly and there was no registration to find.
+     */
+    public function testNonLiteralArgumentsAreSkippedRatherThanPassedOrCalledInapplicable(): void
     {
         $class = $this->makePlugin(
             "        \$name = 'thing';\n"
@@ -427,7 +444,32 @@ class TierB11RoutesWellFormedTest extends TestCase
 
         $this->assertCount(1, $findings);
         $this->assertTrue($findings[0]->isSkipped(), 'an unevaluable registration must not read as a pass');
+        $this->assertFalse(
+            $findings[0]->isNotApplicable(),
+            'a registration this inspector cannot read is a blind spot, not an absent feature'
+        );
         $this->assertStringContainsString('non-literal arguments', $findings[0]->message());
+    }
+
+    /**
+     * Source-scan mode is a first-class observation mode, not a degraded one (see the
+     * inspector's class docblock), so a clean scan that finds no call sites has reached a
+     * verdict: this plugin registers no routes.
+     */
+    public function testSourceScanThatFindsNoRouteCallsIsNotApplicableRatherThanSkipped(): void
+    {
+        $class = $this->makePlugin(
+            "        \$loader->add_requirement('class.Thing', '/src/Thing.php');",
+            ['paramType' => '\\DateTimeImmutable ']
+        );
+
+        $findings = $this->inspect($class);
+
+        $this->assertCount(1, $findings, $this->messages($findings));
+        $this->assertTrue($findings[0]->isNotApplicable());
+        $this->assertFalse($findings[0]->isSkipped());
+        $this->assertSame('plugin registers no routes', $findings[0]->message());
+        $this->assertSame('source-scan', $findings[0]->context()['mode'], 'the fallback mode really was used');
     }
 
     public function testCommentedOutRegistrationsAreNotScanned(): void
@@ -550,8 +592,10 @@ class TierB11RoutesWellFormedTest extends TestCase
     }
 
     /**
-     * "Registers no routes" is a skip, and it must not absorb the print: the two are separate
-     * observations and both are true.
+     * "Registers no routes" is not-applicable, and it must not absorb the print: the two are
+     * separate observations and both are true. The failure still decides the cell — the matrix
+     * requires *every* finding to be not-applicable before it will call a cell vacuous — so a
+     * package that prints from a route-less handler stays red rather than going quiet.
      */
     public function testOutputIsReportedEvenWhenTheHandlerRegistersNoRoutes(): void
     {
@@ -562,7 +606,14 @@ class TierB11RoutesWellFormedTest extends TestCase
         $this->assertCount(2, $findings, $this->messages($findings));
         $this->assertTrue($findings[0]->isFailure(), 'the printed bytes are a defect and must be reported');
         $this->assertStringContainsString('b11 silent but noisy', $findings[0]->message());
-        $this->assertTrue($findings[1]->isSkipped(), 'and no route was observed, which is still a skip');
+        $this->assertTrue($findings[1]->isNotApplicable(), 'and no route was observed, which is not a skip');
+        $this->assertSame(
+            FleetMatrix::FAIL,
+            FleetMatrix::verdictFor(array_map(static function (Finding $finding) {
+                return $finding->severity();
+            }, $findings)),
+            'the not-applicable finding must not dilute the failure'
+        );
     }
 
     /**

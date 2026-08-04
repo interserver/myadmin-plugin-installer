@@ -162,26 +162,28 @@ PHP;
         $this->assertSame('Queue templates and queue handler agree', $this->inspector->title());
     }
 
-    public function testNonServicePluginIsSkippedRatherThanPassed(): void
+    public function testNonServicePluginIsNotApplicableRatherThanPassedOrSkipped(): void
     {
         $class = $this->makePlugin(self::DYNAMIC_BODY, ['type' => 'plugin', 'templates' => ['create']]);
 
         $findings = $this->inspect($class);
 
         $this->assertCount(1, $findings);
-        $this->assertTrue($findings[0]->isSkipped(), 'a non-service plugin must not read as a pass');
+        $this->assertTrue($findings[0]->isNotApplicable(), 'a non-service plugin must not read as a pass');
+        $this->assertFalse($findings[0]->isSkipped(), 'nor as a check that could not run');
         $this->assertStringContainsString('type is "plugin", not "service"', $findings[0]->message());
         $this->assertSame('B-14', $findings[0]->assertion());
     }
 
-    public function testServicePluginWithoutAQueueHandlerIsSkipped(): void
+    public function testServicePluginWithoutAQueueHandlerIsNotApplicable(): void
     {
         $class = $this->makePlugin('', ['withQueue' => false, 'templates' => ['create']]);
 
         $findings = $this->inspect($class);
 
         $this->assertCount(1, $findings);
-        $this->assertTrue($findings[0]->isSkipped());
+        $this->assertTrue($findings[0]->isNotApplicable());
+        $this->assertFalse($findings[0]->isSkipped());
         $this->assertStringContainsString('no getQueue() handler', $findings[0]->message());
     }
 
@@ -198,7 +200,7 @@ PHP;
      * The myadmin-hyperv-vps shape: a queue handler that dispatches to SOAP calls through a
      * map and renders nothing. Template completeness simply does not apply.
      */
-    public function testQueueHandlerThatRendersNoTemplatesIsSkipped(): void
+    public function testQueueHandlerThatRendersNoTemplatesIsNotApplicable(): void
     {
         $body = <<<'PHP'
         $serviceInfo = $event->getSubject();
@@ -210,7 +212,8 @@ PHP;
         $findings = $this->inspect($class);
 
         $this->assertCount(1, $findings);
-        $this->assertTrue($findings[0]->isSkipped());
+        $this->assertTrue($findings[0]->isNotApplicable());
+        $this->assertFalse($findings[0]->isSkipped(), 'the scan read the handler cleanly and found no templates');
         $this->assertStringContainsString('does not render *.sh.tpl', $findings[0]->message());
     }
 
@@ -225,7 +228,14 @@ PHP;
         $this->assertStringEndsWith('/templates', $failures[0]->context()['directory']);
     }
 
-    public function testDynamicDispatchWithNoLiteralActionsIsSkippedRatherThanPassed(): void
+    /**
+     * The one branch of this inspector that R-4 leaves as a skip, and the reason it does not
+     * go to zero. Everything of B-14's kind is present — a service, a queue handler, a
+     * directory holding three templates — and the action set cannot be recovered, so none of
+     * the three is checked. That is a blind spot, and `o` would file it among the packages
+     * that simply have no queue.
+     */
+    public function testDynamicDispatchWithNoLiteralActionsStaysASkipRatherThanBecomingNotApplicable(): void
     {
         $class = $this->makePlugin(self::DYNAMIC_BODY, ['templates' => ['create', 'delete', 'restart']]);
 
@@ -233,6 +243,10 @@ PHP;
 
         $this->assertCount(1, $findings);
         $this->assertTrue($findings[0]->isSkipped(), 'nothing was cross-checked, so this is not a pass');
+        $this->assertFalse(
+            $findings[0]->isNotApplicable(),
+            'three real templates went unchecked; that is a coverage hole, not an absent feature'
+        );
         $this->assertStringContainsString('no action set to cross-check', $findings[0]->message());
         $this->assertSame(3, $findings[0]->context()['templates']);
     }
@@ -381,6 +395,7 @@ PHP;
         $this->assertSame([], $this->failures($findings), $this->messages($findings));
         $this->assertCount(1, $findings);
         $this->assertTrue($findings[0]->isSkipped(), 'no action literal was found, so nothing was cross-checked');
+        $this->assertFalse($findings[0]->isNotApplicable(), 'a template directory this check cannot read is a hole');
     }
 
     /**
@@ -486,7 +501,7 @@ PHP;
         $findings = $this->inspect($class);
 
         $this->assertCount(1, $findings, $this->messages($findings));
-        $this->assertTrue($findings[0]->isSkipped());
+        $this->assertTrue($findings[0]->isNotApplicable());
         $this->assertStringContainsString(
             'no getQueue() handler',
             $findings[0]->message(),
