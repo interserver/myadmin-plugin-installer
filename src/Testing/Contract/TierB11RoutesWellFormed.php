@@ -1,0 +1,501 @@
+<?php
+/**
+ * @author Joe Huss <detain@interserver.net>
+ * @copyright 2026
+ * @package MyAdmin
+ * @category Testing
+ */
+
+namespace MyAdmin\Plugins\Testing\Contract;
+
+use ReflectionMethod;
+use Throwable;
+
+/**
+ * Tier-B-11 — every route a plugin registers is well-formed.
+ *
+ * ---------------------------------------------------------------------------------
+ * HOW ROUTES ARE ACTUALLY REGISTERED (verified, not assumed)
+ * ---------------------------------------------------------------------------------
+ * There is no `getRoutes()` anywhere in the fleet — zero of 70 `src/Plugin.php` files
+ * declare one. Routes appear only as a **side effect** of the `function.requirements` hook:
+ *
+ * ```php
+ * public static function getHooks()      { return ['function.requirements' => [__CLASS__, 'getRequirements']]; }
+ * public static function getRequirements(GenericEvent $event)
+ * {
+ *     $loader = $event->getSubject();                       // a MyAdmin\Plugins\Loader
+ *     $loader->add_page_requirement('abuse', '/../vendor/detain/myadmin-abuse-plugin/src/abuse.php');
+ * }
+ * ```
+ *
+ * Fleet census of `vendor/detain/myadmin-*\/src/Plugin.php`: 52 packages declare
+ * `getRequirements()`, but only **27** register a route — 221 `add_page_requirement()` calls
+ * plus a single `add_admin_page_requirement()`. The other 168 `$loader->` calls are
+ * `add_requirement()`, which loads a file for a function name and registers no route at all.
+ * `add_route_requirement()` is never called directly by a plugin. The remaining 42 packages
+ * register nothing and are **skipped**, not passed.
+ *
+ * ---------------------------------------------------------------------------------
+ * TWO OBSERVATION MODES, ONE OBSERVATION POINT
+ * ---------------------------------------------------------------------------------
+ * Routes are observed on a real {@see TierB11RecordingLoader}, so path composition, the
+ * `['GET', 'POST']` default and the `'/'.$function` default are production behaviour rather
+ * than a model of it. How the loader gets driven depends on what is installed:
+ *
+ *  - **`execute`** — the handler is invoked with a `GenericEvent` wrapping the recorder.
+ *    Used whenever `Symfony\Component\EventDispatcher\GenericEvent` is loadable, which is the
+ *    case in every plugin's own CI, since each plugin requires `symfony/event-dispatcher`.
+ *  - **`source-scan`** — {@see TierB11RouteCallScanner} recovers the call sites from tokens
+ *    and replays them onto the recorder. Used when the handler cannot be invoked.
+ *
+ * The fallback is load-bearing rather than defensive: `symfony/event-dispatcher` is **not**
+ * a dependency of this installer package, so inside this repo `GenericEvent` does not exist
+ * and every real plugin's type-hinted handler raises a `TypeError`. Execute-only would
+ * therefore skip 27 of 27 route-registering packages here — the same vacuous green the
+ * `getRoutes()` design produced, just spelled "skipped". Every {@see Finding} carries the
+ * mode it was observed in, so a triage matrix never has to guess.
+ *
+ * ---------------------------------------------------------------------------------
+ * WHAT IS ASSERTED, AND WHY EACH ONE IS A REAL BREAK
+ * ---------------------------------------------------------------------------------
+ * Consumption is `public_html/route.php`: `$r->addRoute($route[2], $path, $route)`, then
+ * `$handlerPerm = $handler[0]; $handlerFunc = $handler[1];`.
+ *
+ *  1. **path starts with `/`** — FastRoute matches against `urldecode($urlPath)`, which
+ *     always begins with `/`. A path that does not is unreachable. FAILURE.
+ *  2. **handler is non-empty** — `$route[1]` reaches `call_user_func()` in route.php. An
+ *     empty string or a malformed callable array is a fatal on dispatch. FAILURE.
+ *     The `[SomeClass::class, 'METHOD']` form is the documented multi-verb convention —
+ *     route.php:242 rewrites the literal `'METHOD'` to the lowercased request method — and is
+ *     explicitly accepted, not flagged.
+ *  3. **methods are known verbs** — route.php dispatches on `$_SERVER['REQUEST_METHOD']`,
+ *     which is always uppercase, so a lowercase or invented verb can never match. An empty
+ *     list registers a route reachable by nothing. FAILURE.
+ *     A bare string (`'GET'` rather than `['GET']`) is a NOTICE, not a failure:
+ *     `FastRoute\RouteCollector::addRoute()` does `foreach ((array) $httpMethod ...)`, and
+ *     core's own `include/config/router.php` uses the bare form on ~40 lines. Flagging it
+ *     would be inventing a rule the router does not have.
+ *  4. **route type is in the router's permission vocabulary** — route.php:283 gates both the
+ *     session check and the admin check on exact string membership. A typo'd type is not a
+ *     cosmetic problem: it silently drops out of both gates, leaving the route unauthenticated.
+ *     FAILURE.
+ *  5. **no duplicate path within one plugin** — the loader stores `$this->routes[$path] = ...`,
+ *     so a repeat registration discards the earlier one with no diagnostic. FAILURE.
+ *
+ * Deliberately **not** asserted: whether the handler file exists, and whether the source path
+ * resolves. That is Tier-B-9/B-10's subject; B-11 observes the registered route, they observe
+ * what it points at.
+ */
+class TierB11RoutesWellFormed implements PluginInspector
+{
+    /**
+     * HTTP verbs the router can ever dispatch.
+     *
+     * @var array<int,string>
+     */
+    const VALID_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
+
+    /**
+     * Route types the router recognises.
+     *
+     * Union of the types `Loader`'s own helpers emit (`client`, `admin`, `public`,
+     * `public_file`, `client_ajax`, `admin_api`, `client_api`), the two more its
+     * `add_route_requirement()` docblock documents (`public_ajax`, `admin_ajax`), and
+     * `public_api`, which core's `include/config/router.php` uses and route.php:198/246
+     * branches on.
+     *
+     * @var array<int,string>
+     */
+    const VALID_TYPES = [
+        'client', 'admin', 'public', 'public_file',
+        'client_ajax', 'public_ajax', 'admin_ajax',
+        'client_api', 'admin_api', 'public_api',
+    ];
+
+    /**
+     * Hook key the `Loader` is dispatched on.
+     *
+     * @var string
+     */
+    const REQUIREMENTS_HOOK = 'function.requirements';
+
+    /**
+     * Handler name used when `getHooks()` cannot be read.
+     *
+     * @var string
+     */
+    const DEFAULT_HANDLER = 'getRequirements';
+
+    /**
+     * @return string
+     */
+    public function id()
+    {
+        return 'B-11';
+    }
+
+    /**
+     * @return string
+     */
+    public function title()
+    {
+        return 'Route registrations are well-formed';
+    }
+
+    /**
+     * @param PluginSubject $subject
+     * @return array<int,Finding>
+     */
+    public function inspect(PluginSubject $subject)
+    {
+        if (!$subject->isLoadable()) {
+            return [Finding::skipped($this->id(), 'plugin class does not load', [
+                'class' => $subject->pluginClass(),
+            ])];
+        }
+        $handler = $this->handlerMethod($subject);
+        if ($handler === null) {
+            return [Finding::skipped($this->id(), 'plugin declares no function.requirements handler', [
+                'class' => $subject->pluginClass(),
+            ])];
+        }
+        $observed = $this->observe($subject, $handler);
+        if ($observed['registrations'] === []) {
+            return [Finding::skipped($this->id(), $observed['skipReason'], [
+                'class' => $subject->pluginClass(),
+                'handler' => $handler,
+                'mode' => $observed['mode'],
+            ])];
+        }
+        return $this->validate($observed['registrations'], $observed['mode']);
+    }
+
+    /**
+     * Name of the method bound to `function.requirements`.
+     *
+     * Read from `getHooks()` where possible so a plugin binding a differently named handler
+     * is still followed. `getHooks()` is allowed to throw — nine repos initialise statics
+     * from constants such as `PRORATE_BILLING` that do not exist outside a MyAdmin request —
+     * so failure falls back to the fleet-wide conventional name.
+     *
+     * @param PluginSubject $subject
+     * @return string|null
+     */
+    private function handlerMethod(PluginSubject $subject)
+    {
+        $reflection = $subject->reflection();
+        $name = null;
+        if ($reflection->hasMethod('getHooks')) {
+            try {
+                $hooks = $reflection->getMethod('getHooks')->invoke(null);
+                if (is_array($hooks)) {
+                    $name = $this->handlerFromHooks($hooks);
+                }
+            } catch (Throwable $error) {
+                $name = null;
+            }
+        }
+        if ($name === null) {
+            $name = self::DEFAULT_HANDLER;
+        }
+        if (!$reflection->hasMethod($name)) {
+            return null;
+        }
+        $method = $reflection->getMethod($name);
+        return $method->isStatic() && $method->isPublic() ? $method->getName() : null;
+    }
+
+    /**
+     * @param array<mixed,mixed> $hooks
+     * @return string|null
+     */
+    private function handlerFromHooks(array $hooks)
+    {
+        foreach ($hooks as $key => $target) {
+            if ($key !== self::REQUIREMENTS_HOOK) {
+                continue;
+            }
+            if (is_array($target) && isset($target[1]) && is_string($target[1])) {
+                return $target[1];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Drives a recording loader, by execution where possible and by source scan otherwise.
+     *
+     * @param PluginSubject $subject
+     * @param string        $handler
+     * @return array{registrations:array<int,array<string,mixed>>,mode:string,skipReason:string}
+     */
+    private function observe(PluginSubject $subject, $handler)
+    {
+        $executed = $this->executeHandler($subject, $handler);
+        if ($executed !== null) {
+            return [
+                'registrations' => $executed->registrations(),
+                'mode' => 'execute',
+                'skipReason' => 'plugin registers no routes',
+            ];
+        }
+        return $this->scanSource($subject, $handler);
+    }
+
+    /**
+     * Invokes the handler against a recording loader.
+     *
+     * @param PluginSubject $subject
+     * @param string        $handler
+     * @return TierB11RecordingLoader|null null when the handler could not be invoked
+     */
+    private function executeHandler(PluginSubject $subject, $handler)
+    {
+        $eventClass = 'Symfony\\Component\\EventDispatcher\\GenericEvent';
+        $loader = new TierB11RecordingLoader();
+        $event = class_exists($eventClass) ? new $eventClass($loader) : new SubjectEvent($loader);
+        try {
+            $method = new ReflectionMethod($subject->pluginClass(), $handler);
+            $method->invoke(null, $event);
+        } catch (Throwable $error) {
+            return null;
+        }
+        return $loader;
+    }
+
+    /**
+     * Recovers the call sites from tokens and replays them onto a recording loader.
+     *
+     * @param PluginSubject $subject
+     * @param string        $handler
+     * @return array{registrations:array<int,array<string,mixed>>,mode:string,skipReason:string}
+     */
+    private function scanSource(PluginSubject $subject, $handler)
+    {
+        $file = $subject->reflection()->getFileName();
+        if ($file === false || !is_file($file)) {
+            return [
+                'registrations' => [],
+                'mode' => 'source-scan',
+                'skipReason' => 'handler could not be executed and the plugin has no readable source file',
+            ];
+        }
+        $calls = TierB11RouteCallScanner::scanFile($file);
+        if ($calls === []) {
+            return [
+                'registrations' => [],
+                'mode' => 'source-scan',
+                'skipReason' => 'plugin registers no routes',
+            ];
+        }
+        $loader = new TierB11RecordingLoader();
+        $unresolved = 0;
+        foreach ($calls as $call) {
+            if (!$call['resolved'] || !$this->callable($loader, $call)) {
+                $unresolved++;
+                continue;
+            }
+            $loader->setCurrentLine($call['line']);
+            call_user_func_array([$loader, $call['helper']], $call['args']);
+        }
+        $loader->setCurrentLine(null);
+        $registrations = $loader->registrations();
+        return [
+            'registrations' => $registrations,
+            'mode' => 'source-scan',
+            'skipReason' => $unresolved > 0
+                ? $unresolved.' route registration(s) use non-literal arguments and could not be evaluated statically'
+                : 'plugin registers no routes',
+        ];
+    }
+
+    /**
+     * Whether a scanned call can be replayed without an ArgumentCountError.
+     *
+     * A call with too few arguments is a genuine defect, but it is one the plugin's own
+     * suite raises the moment the handler runs; replaying it here would throw out of the
+     * inspector, which is exactly what an inspector must never do.
+     *
+     * @param TierB11RecordingLoader $loader
+     * @param array<string,mixed>    $call
+     * @return bool
+     */
+    private function callable(TierB11RecordingLoader $loader, array $call)
+    {
+        $method = new ReflectionMethod($loader, $call['helper']);
+        return $call['argCount'] >= $method->getNumberOfRequiredParameters();
+    }
+
+    /**
+     * @param array<int,array<string,mixed>> $registrations
+     * @param string                         $mode
+     * @return array<int,Finding>
+     */
+    private function validate(array $registrations, $mode)
+    {
+        $findings = [];
+        $seen = [];
+        foreach ($registrations as $registration) {
+            $context = ['mode' => $mode, 'path' => $registration['path']];
+            if ($registration['line'] !== null) {
+                $context['line'] = $registration['line'];
+            }
+            $findings = array_merge(
+                $findings,
+                $this->checkPath($registration, $context),
+                $this->checkHandler($registration, $context),
+                $this->checkMethods($registration, $context),
+                $this->checkType($registration, $context)
+            );
+            if (!is_string($registration['path'])) {
+                continue;
+            }
+            // array_key_exists, not isset: in execute mode there is no source line, so the
+            // stored value is null and isset() would report every duplicate as unseen.
+            if (array_key_exists($registration['path'], $seen)) {
+                $findings[] = Finding::failure(
+                    $this->id(),
+                    'route path "'.$registration['path'].'" is registered more than once; the loader keys routes by '
+                        .'path, so the earlier registration is silently discarded',
+                    $context + ['firstLine' => $seen[$registration['path']]]
+                );
+                continue;
+            }
+            $seen[$registration['path']] = $registration['line'];
+        }
+        return $findings;
+    }
+
+    /**
+     * @param array<string,mixed> $registration
+     * @param array<string,mixed> $context
+     * @return array<int,Finding>
+     */
+    private function checkPath(array $registration, array $context)
+    {
+        $path = $registration['path'];
+        if (!is_string($path) || $path === '') {
+            return [Finding::failure(
+                $this->id(),
+                'route path is not a non-empty string',
+                $context + ['pathType' => gettype($path)]
+            )];
+        }
+        if (strpos($path, '/') !== 0) {
+            return [Finding::failure(
+                $this->id(),
+                'route path "'.$path.'" does not start with "/" and can never match a request URI',
+                $context
+            )];
+        }
+        return [];
+    }
+
+    /**
+     * @param array<string,mixed> $registration
+     * @param array<string,mixed> $context
+     * @return array<int,Finding>
+     */
+    private function checkHandler(array $registration, array $context)
+    {
+        $function = $registration['function'];
+        if (is_string($function)) {
+            return $function === ''
+                ? [Finding::failure($this->id(), 'route handler is an empty string', $context)]
+                : [];
+        }
+        if (is_array($function)) {
+            // `[SomeClass::class, 'METHOD']` is the documented multi-verb form; route.php
+            // rewrites 'METHOD' to the lowercased request method before dispatching.
+            $valid = count($function) === 2
+                && isset($function[0], $function[1])
+                && is_string($function[0]) && $function[0] !== ''
+                && is_string($function[1]) && $function[1] !== '';
+            return $valid ? [] : [Finding::failure(
+                $this->id(),
+                'route handler array is not a [class, method] pair',
+                $context
+            )];
+        }
+        return [Finding::failure(
+            $this->id(),
+            'route handler is neither a function name nor a [class, method] pair',
+            $context + ['handlerType' => gettype($function)]
+        )];
+    }
+
+    /**
+     * @param array<string,mixed> $registration
+     * @param array<string,mixed> $context
+     * @return array<int,Finding>
+     */
+    private function checkMethods(array $registration, array $context)
+    {
+        $methods = $registration['methods'];
+        if (is_string($methods)) {
+            if (!in_array($methods, self::VALID_METHODS, true)) {
+                return [Finding::failure(
+                    $this->id(),
+                    'route method "'.$methods.'" is not an HTTP verb the router can dispatch',
+                    $context
+                )];
+            }
+            return [Finding::notice(
+                $this->id(),
+                'route methods given as the bare string "'.$methods.'" rather than an array; FastRoute casts it, '
+                    .'so this works, but the array form is the catalogue convention',
+                $context
+            )];
+        }
+        if (!is_array($methods)) {
+            return [Finding::failure(
+                $this->id(),
+                'route methods is neither an array nor a string',
+                $context + ['methodsType' => gettype($methods)]
+            )];
+        }
+        if ($methods === []) {
+            return [Finding::failure(
+                $this->id(),
+                'route registers an empty method list and is reachable by no request',
+                $context
+            )];
+        }
+        $invalid = [];
+        foreach ($methods as $method) {
+            if (!is_string($method) || !in_array($method, self::VALID_METHODS, true)) {
+                $invalid[] = is_string($method) ? $method : gettype($method);
+            }
+        }
+        if ($invalid !== []) {
+            return [Finding::failure(
+                $this->id(),
+                'route methods contain '.implode(', ', array_map(function ($value) {
+                    return '"'.$value.'"';
+                }, $invalid)).', which the router can never dispatch',
+                $context
+            )];
+        }
+        return [];
+    }
+
+    /**
+     * @param array<string,mixed> $registration
+     * @param array<string,mixed> $context
+     * @return array<int,Finding>
+     */
+    private function checkType(array $registration, array $context)
+    {
+        $type = $registration['type'];
+        if (is_string($type) && in_array($type, self::VALID_TYPES, true)) {
+            return [];
+        }
+        return [Finding::failure(
+            $this->id(),
+            'route type '.(is_string($type) ? '"'.$type.'"' : gettype($type)).' is not one of the router\'s '
+                .'permission buckets, so the route drops out of the session and admin gates',
+            $context
+        )];
+    }
+}
