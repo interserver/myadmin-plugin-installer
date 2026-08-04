@@ -373,6 +373,64 @@ class FleetMatrixTest extends TestCase
     }
 
     /**
+     * "No hatches were used" and "nobody looked for hatches" must not render the same. Escape-hatch
+     * auditability is its own G2 checklist item, so the section is unconditional — unlike
+     * "Excluded packages", which is a detail of the run rather than a thing being certified.
+     *
+     * @return void
+     */
+    public function testTheHatchSectionIsPresentEvenWhenNoPackageUsesOne()
+    {
+        $markdown = FleetMatrix::renderMarkdown($this->rows(), self::IDS);
+        $this->assertStringContainsString('## Escape hatches', $markdown);
+        $this->assertStringContainsString('No package overrides a contract default.', $markdown);
+    }
+
+    /**
+     * The abuse case is *which* directory a package pointed the harness at, so the value is on
+     * the page, not just the hatch's name.
+     *
+     * @return void
+     */
+    public function testHatchRowsNameTheOverrideAndItsValue()
+    {
+        $markdown = FleetMatrix::renderMarkdown($this->rows(), self::IDS, [
+            'hatches' => [
+                'a/one' => [[
+                    'assertion' => 'B-10',
+                    'outcome' => 'pass',
+                    'overrides' => ['requirementRoot' => '/somewhere/else'],
+                ]],
+            ],
+        ]);
+
+        $this->assertStringContainsString('| one | B-10 | pass | requirementRoot | `/somewhere/else` |', $markdown);
+        $this->assertStringNotContainsString('No package overrides a contract default.', $markdown);
+    }
+
+    /**
+     * @return void
+     */
+    public function testEveryOverrideOnAnEntryGetsItsOwnRow()
+    {
+        $markdown = FleetMatrix::renderMarkdown($this->rows(), self::IDS, [
+            'hatches' => [
+                'a/one' => [[
+                    'assertion' => 'A-1',
+                    'outcome' => 'skip',
+                    'overrides' => ['requirementRoot' => '/r', 'constantOverrides' => ['PRORATE_BILLING' => 2]],
+                ]],
+            ],
+        ]);
+
+        $this->assertStringContainsString('| one | A-1 | skip | requirementRoot | `/r` |', $markdown);
+        $this->assertStringContainsString(
+            '| one | A-1 | skip | constantOverrides | `PRORATE_BILLING=2` |',
+            $markdown
+        );
+    }
+
+    /**
      * @return void
      */
     public function testGridRendersOneGlyphPerVerdict()
@@ -423,6 +481,69 @@ class FleetMatrixTest extends TestCase
         $markdown = FleetMatrix::renderMarkdown($this->rows(), self::IDS, ['generator' => 'php tools/fleet-matrix.php']);
         $this->assertStringContainsString("```bash\nphp tools/fleet-matrix.php\n```", $markdown);
         $this->assertStringContainsString('do not hand-edit', $markdown);
+    }
+
+    /**
+     * @return void
+     */
+    public function testHatchesAreCollectedFromTheRecordsThatCarryThem()
+    {
+        $records = [
+            ['package' => 'a/one', 'hatches' => []],
+            ['package' => 'b/two', 'hatches' => [['assertion' => 'B-10', 'outcome' => 'pass', 'overrides' => ['r' => '/x']]]],
+            ['package' => 'c/three'],
+        ];
+        $collected = FleetMatrix::collectHatches($records);
+
+        $this->assertSame(['b/two'], array_keys($collected));
+        $this->assertSame('B-10', $collected['b/two'][0]['assertion']);
+    }
+
+    /**
+     * @return void
+     */
+    public function testCollectingHatchesFromNothingYieldsNothing()
+    {
+        $this->assertSame([], FleetMatrix::collectHatches([]));
+    }
+
+    // -----------------------------------------------------------------------
+    // The shim's wiring
+    // -----------------------------------------------------------------------
+
+    /**
+     * The one thing about `tools/fleet-matrix.php` a unit test cannot reach: that the child
+     * process actually puts the hatch ledger in its record. Delete that key and every
+     * assertion above still passes while the fleet's escape-hatch audit silently reports
+     * nothing — the exact failure this section exists to prevent.
+     *
+     * Skips rather than fails without a core checkout, because the fleet *is* the plugin
+     * packages installed beside this one; there is nothing to inspect in a standalone clone.
+     *
+     * @return void
+     */
+    public function testTheChildProcessReportsCellsAndHatchesTogether()
+    {
+        $vendorDir = dirname(dirname(dirname(dirname(__DIR__))));
+        $tool = dirname(dirname(__DIR__)).'/tools/fleet-matrix.php';
+        $composer = $vendorDir.'/detain/myadmin-abuse-plugin/composer.json';
+        if (!is_file($vendorDir.'/autoload.php') || !is_file($composer)) {
+            $this->markTestSkipped('needs a MyAdmin core checkout — the fleet lives beside this package');
+        }
+
+        $class = FleetMatrix::pluginClassFor((array)json_decode((string)file_get_contents($composer), true));
+        $this->assertNotNull($class);
+
+        $command = escapeshellarg(PHP_BINARY).' '.escapeshellarg($tool)
+            .' --vendor-dir='.escapeshellarg($vendorDir)
+            .' --package=detain/myadmin-abuse-plugin'
+            .' --class='.escapeshellarg($class).' 2>/dev/null';
+        $record = json_decode((string)shell_exec($command), true);
+
+        $this->assertIsArray($record, 'the child must emit one decodable JSON record');
+        $this->assertArrayHasKey('cells', $record);
+        $this->assertArrayHasKey('hatches', $record, 'the hatch ledger must travel with the verdicts');
+        $this->assertNotSame([], $record['cells']);
     }
 
     // -----------------------------------------------------------------------

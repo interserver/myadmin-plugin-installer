@@ -41,6 +41,11 @@ result, and it is counted separately above rather than folded into the denominat
 | B-14 | 1 | 0 | 70 | packages with no getQueue(), or not services |
 | B-15 | 71 | 0 | 0 |  |
 
+## Escape hatches
+
+No package overrides a contract default. Every cell above was measured
+against the assertion as written.
+
 ## Failing cells, classified (all P-bugs — report only, per D7)
 
 ### A-7 — 1 package(s)

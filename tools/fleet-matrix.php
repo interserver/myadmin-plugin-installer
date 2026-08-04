@@ -164,7 +164,16 @@ function fleetMatrixChild($package, $class)
         ];
     }
 
-    echo json_encode(['package' => $package, 'class' => $class, 'stray' => $stray, 'cells' => $cells]), "\n";
+    echo json_encode([
+        'package' => $package,
+        'class' => $class,
+        'stray' => $stray,
+        'cells' => $cells,
+        // Escape-hatch use is a G2 checklist item on its own: a hatch leaves no trace on a
+        // passing run, which is exactly the case a reviewer needs. The ledger starts empty in
+        // every child because each package gets its own process, so no reset is needed here.
+        'hatches' => PluginContractTestCase::overrideLedger(),
+    ]), "\n";
     return 0;
 }
 
@@ -205,6 +214,7 @@ function fleetMatrixParent(array $options, $packageRoot)
     $markdown = FleetMatrix::renderMarkdown($rows, $ids, [
         'notes' => fleetMatrixNotes($options['notes'], $ids),
         'excluded' => $excluded,
+        'hatches' => FleetMatrix::collectHatches($records),
         'generator' => 'php tools/fleet-matrix.php',
     ]);
 

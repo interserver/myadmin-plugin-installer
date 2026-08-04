@@ -230,6 +230,32 @@ class FleetMatrix
     }
 
     /**
+     * Escape-hatch ledgers, keyed by package, from the raw per-package records.
+     *
+     * Lives here rather than in the shim's collection loop for one reason: a loop in the shim
+     * is unreachable from a unit test, and deleting it would leave the audit reporting "no
+     * package overrides a contract default" over a fleet that does. That is the one sentence in
+     * the document nobody would think to double-check.
+     *
+     * @param array<int,array<string,mixed>> $records one decoded child record per package
+     * @return array<string,array<int,array<string,mixed>>> package => ledger entries
+     */
+    public static function collectHatches(array $records)
+    {
+        $hatches = [];
+        foreach ($records as $record) {
+            if (!isset($record['package']) || !isset($record['hatches']) || !is_array($record['hatches'])) {
+                continue;
+            }
+            if ($record['hatches'] === []) {
+                continue;
+            }
+            $hatches[(string)$record['package']] = $record['hatches'];
+        }
+        return $hatches;
+    }
+
+    /**
      * Package name as the grid column shows it: vendor prefix and the `myadmin-` marker
      * dropped, because 69 rows of `detain/myadmin-` is 16 characters of nothing.
      *
@@ -260,6 +286,7 @@ class FleetMatrix
      * @param array<int,string> $ids catalogue ids, in report order
      * @param array<string,mixed> $options 'notes' => array<string,string> id => census note,
      *                                     'excluded' => array<string,string> package => why it is not in the fleet,
+     *                                     'hatches' => array<string,array<int,array<string,mixed>>> package => ledger entries,
      *                                     'generator' => string command that reproduces this file
      * @return string markdown
      */
@@ -267,10 +294,12 @@ class FleetMatrix
     {
         $notes = isset($options['notes']) && is_array($options['notes']) ? $options['notes'] : [];
         $excluded = isset($options['excluded']) && is_array($options['excluded']) ? $options['excluded'] : [];
+        $hatches = isset($options['hatches']) && is_array($options['hatches']) ? $options['hatches'] : [];
         $generator = isset($options['generator']) ? (string)$options['generator'] : 'tools/fleet-matrix.php';
 
         $out = self::renderHeader($rows, $ids, $generator);
         $out .= self::renderCensus($rows, $ids, $notes);
+        $out .= self::renderHatches($hatches);
         $out .= self::renderExcluded($excluded);
         $out .= self::renderFailures($rows, $ids);
         $out .= self::renderGrid($rows, $ids);
@@ -387,6 +416,70 @@ class FleetMatrix
             $out .= '| '.implode(' | ', $cols)." |\n";
         }
         return $out."\n";
+    }
+
+    /**
+     * Every cell reached under a relaxed contract, from
+     * {@see \MyAdmin\Plugins\Testing\PluginContractTestCase::overrideLedger()}.
+     *
+     * This section is rendered even when it is empty, unlike "Excluded packages". Escape-hatch
+     * auditability is a G2 checklist item in its own right, so an absent section would be
+     * indistinguishable from a run that never looked — and "no evidence of abuse" and "no
+     * search for abuse" are the two readings this whole document exists to keep apart.
+     *
+     * A `pass` row is the one worth reading. A failure under a hatch is still a failure; a pass
+     * under a hatch is an assertion that held only because the package changed what it was asked.
+     *
+     * @param array<string,array<int,array<string,mixed>>> $hatches package => ledger entries
+     * @return string
+     */
+    private static function renderHatches(array $hatches)
+    {
+        $out = "## Escape hatches\n\n";
+        if ($hatches === []) {
+            return $out."No package overrides a contract default. Every cell above was measured\n"
+                ."against the assertion as written.\n\n";
+        }
+        ksort($hatches);
+        $out .= "Cells reached under a relaxed contract. A `pass` row is an assertion that held\n"
+            ."only because the package changed what it was asked.\n\n"
+            ."| package | assertion | outcome | override | value |\n|---|---|---|---|---|\n";
+        foreach ($hatches as $package => $entries) {
+            foreach ($entries as $entry) {
+                $overrides = isset($entry['overrides']) && is_array($entry['overrides']) ? $entry['overrides'] : [];
+                foreach ($overrides as $name => $value) {
+                    $out .= '| '.self::shortName($package)
+                        .' | '.(isset($entry['assertion']) ? $entry['assertion'] : '?')
+                        .' | '.(isset($entry['outcome']) ? $entry['outcome'] : '?')
+                        .' | '.$name
+                        .' | `'.self::describeValue($value)."` |\n";
+                }
+            }
+        }
+        return $out."\n";
+    }
+
+    /**
+     * A hatch value as one table cell. The whole abuse case is *which* directory, so the value
+     * is printed rather than summarised — but a constant map has to collapse to something that
+     * fits a row.
+     *
+     * @param mixed $value what the subject held
+     * @return string
+     */
+    private static function describeValue($value)
+    {
+        if (is_array($value)) {
+            $parts = [];
+            foreach ($value as $key => $item) {
+                $parts[] = $key.'='.(is_scalar($item) ? (string)$item : gettype($item));
+            }
+            return implode(', ', $parts);
+        }
+        if (is_bool($value)) {
+            return $value ? 'true' : 'false';
+        }
+        return is_scalar($value) ? (string)$value : gettype($value);
     }
 
     /**
