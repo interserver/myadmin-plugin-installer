@@ -46,8 +46,8 @@ result, and it is counted separately above rather than folded into the denominat
 ### A-7 — 1 package(s)
 
 - **detain/myadmin-cloudlinux-licensing**
-  - [A-7] Detain\MyAdminCloudlinux\Plugin registers hook key "plugin.install", whose prefix is "plugin", but the plugin declares $module = "licenses". The hook registers under a prefix nothing dispatches to. Expected the key to start with "licenses." or to be one of the global hooks. (class='Detain\\MyAdminCloudlinux\\Plugin', key='plugin.install', prefix='plugin', module='licenses', problem='prefix-mismatch')
-  - [A-7] Detain\MyAdminCloudlinux\Plugin registers hook key "plugin.uninstall", whose prefix is "plugin", but the plugin declares $module = "licenses". The hook registers under a prefix nothing dispatches to. Expected the key to start with "licenses." or to be one of the global hooks. (class='Detain\\MyAdminCloudlinux\\Plugin', key='plugin.uninstall', prefix='plugin', module='licenses', problem='prefix-mismatch')
+  - [A-7] Detain\MyAdminCloudlinux\Plugin registers hook key "plugin.install", whose prefix is "plugin", but the plugin declares $module = "licenses". The hook registers under a prefix nothing dispatches to. Expected the key to start with "licenses." or to be one of the global hooks. (class='Detain\\MyAdminCloudlinux\\Plugin', key='plugin.install', prefix='plugin', module='licenses', problem='prefix-mismatch', dispatched=false)
+  - [A-7] Detain\MyAdminCloudlinux\Plugin registers hook key "plugin.uninstall", whose prefix is "plugin", but the plugin declares $module = "licenses". The hook registers under a prefix nothing dispatches to. Expected the key to start with "licenses." or to be one of the global hooks. (class='Detain\\MyAdminCloudlinux\\Plugin', key='plugin.uninstall', prefix='plugin', module='licenses', problem='prefix-mismatch', dispatched=false)
 
 ### B-9b — 1 package(s)
 

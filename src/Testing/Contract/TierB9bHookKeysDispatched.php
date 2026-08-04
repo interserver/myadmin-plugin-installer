@@ -71,6 +71,29 @@ class TierB9bHookKeysDispatched implements PluginInspector
     /**
      * Keys dispatched verbatim, matched exactly.
      *
+     * ---------------------------------------------------------------------------------
+     * SINGLE SOURCE OF TRUTH — A-7 ALIASES THIS
+     * ---------------------------------------------------------------------------------
+     * {@see TierA7HookKeyScoping::GLOBAL_HOOK_KEYS} *is* this constant, not a copy of it.
+     * A-7 asks whether a key may be registered by a plugin whose `$module` does not match
+     * the key's prefix; the answer is yes exactly when the key is dispatched from a literal
+     * string, because a literal dispatch fires regardless of who is listening. So "global"
+     * and "dispatched verbatim" name one set, and the two hand-maintained lists that used to
+     * express it had already drifted — A-7 carried six of these nine, and false-failed
+     * `licenses.deactivate_key` with the words "a prefix nothing dispatches to" while this
+     * class, in the same run, reported that key as dispatched.
+     *
+     * The obligation the class docblock states — *anyone adding a dispatch site adds it
+     * here* — therefore now covers A-7 as well. Adding a key here widens what A-7 accepts
+     * under a non-matching `$module`, so a key belongs in this list only if it is genuinely
+     * dispatched from a literal; a `$module.'.<suffix>'` dispatch belongs in
+     * {@see DYNAMIC_SUFFIXES}, which A-7 deliberately does **not** consult.
+     *
+     * The `licenses.*` three are the literal dispatches in core's
+     * `include/licenses/deactivate_license_by_key.php`,
+     * `include/licenses/deactivate_license_by_ip.php` and
+     * `include/licenses/license.functions.inc.php`.
+     *
      * @var array<int,string>
      */
     const LITERAL_KEYS = [
