@@ -3,7 +3,7 @@
     "A-9": "0 yield — regression guard",
     "B-9": "0 yield — regression guard",
     "B-9b": "cloudlinux dead hooks",
-    "B-10": "dangling requirement paths",
+    "B-10": "dangling requirement paths · n/a: registers no requirement paths at all",
     "B-11": "n/a: registers no routes, or no function.requirements handler",
     "B-12": "n/a: orphaned getSettings — core can never invoke it",
     "B-13": "n/a: no getMenu()",

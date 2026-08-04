@@ -685,7 +685,17 @@ class TierB10RequirementPathsResolveTest extends TestCase
     {
         $subject = new PluginSubject(TierB10NoRequirementsPlugin::class);
         $this->assertFalse($subject->skipsRequirementCheck());
-        $this->assertSame([], $this->inspector->inspect($subject));
+
+        $findings = $this->inspector->inspect($subject);
+        $this->assertCount(1, $findings);
+        $this->assertTrue(
+            $findings[0]->isNotApplicable(),
+            'the fixture registers nothing, so the check runs and finds nothing of its kind'
+        );
+        $this->assertFalse(
+            $findings[0]->isSkipped(),
+            'an unset root must not read as the opt-out, which would be a skip'
+        );
     }
 
     /**
@@ -699,12 +709,26 @@ class TierB10RequirementPathsResolveTest extends TestCase
     }
 
     /**
+     * The cell R-4 was written for. This used to return `[]` — a pass — on the reasoning that
+     * all zero registered paths resolve. B-11 called the identical fact a skip, so the same 18
+     * packages were green here and grey there.
+     *
+     * Pinned in both directions: not a pass, because a vacuous cell verifies nothing; not a
+     * skip, because the check ran to completion and reached a verdict.
+     *
      * @return void
      */
-    public function testPluginRegisteringNothingPassesVacuously()
+    public function testPluginRegisteringNothingIsNotApplicableRatherThanVacuouslyGreen()
     {
         $root = $this->makeRoot();
-        $this->assertSame([], $this->inspect(TierB10NoRequirementsPlugin::class, $root));
+        $findings = $this->inspect(TierB10NoRequirementsPlugin::class, $root);
+
+        $this->assertCount(1, $findings);
+        $this->assertTrue($findings[0]->isNotApplicable());
+        $this->assertFalse($findings[0]->isSkipped(), 'the check ran; it did not decline to look');
+        $this->assertFalse($findings[0]->isFailure());
+        $this->assertNotSame([], $findings, 'an empty list is the vacuous pass this replaced');
+        $this->assertStringContainsString('registers no requirement paths', $findings[0]->describe());
     }
 
     /**

@@ -189,9 +189,20 @@ class TierB10RequirementPathsResolve implements PluginInspector
      * Context marker: not judged, because the path leaves the package and there is no core
      * root here.
      *
-     * This is the skip R-10 introduces, and the one a fourth matrix state ("not applicable")
-     * should eventually claim: nothing is wrong with the plugin and nothing is wrong with the
-     * environment, the question simply is not answerable from a standalone checkout.
+     * This is the skip R-10 introduces, and it **stays a skip** now that R-4 has landed the
+     * fourth state. The argument for promoting it to `not applicable` was that nothing is wrong
+     * with the plugin and nothing is wrong with the environment. True, and beside the point:
+     * `not applicable` means *this plugin has nothing of this kind*, and a package reaching here
+     * has a registered path — the check simply could not resolve it. That is `skip`'s definition
+     * exactly, and it is the same shape as B-14's five dynamic-dispatch cells, which are the
+     * fleet's other genuine blind spot.
+     *
+     * It matters which way this falls. `skip` is the state a reader is expected to act on;
+     * `not applicable` is the state that needs no action. A core-relative path in a standalone
+     * repo is actionable — run the check in a core checkout and you get an answer — so filing it
+     * under "nothing to see" is precisely the misreport R-4 removed everywhere else. It is also
+     * what keeps a plugin repo's green B-10 legible as the weaker claim it is; flatten this and
+     * R-10's added ground quietly degrades into the CI-fixture option without the fixture.
      */
     const GROUNDING_OUTSIDE_PACKAGE = 'outside-package-no-core-root';
 
@@ -250,9 +261,17 @@ class TierB10RequirementPathsResolve implements PluginInspector
             return [$target];
         }
         if ($target === null) {
-            // Nothing registers requirements. Vacuously satisfied: the check ran, found no
-            // paths, and all zero of them resolve.
-            return [];
+            // Nothing registers requirements. This was a pass until R-4, on the reasoning that
+            // the check ran, found no paths, and all zero of them resolve — true, and exactly
+            // the overstatement the fourth state exists to remove. B-11 called the identical
+            // fact a skip for the same 18 packages, so `backups-module` was green in this
+            // column and grey in that one. Not-applicable is what both meant.
+            return [Finding::notApplicable(
+                self::ID,
+                $subject->pluginClass().' registers no requirement paths, so there is nothing'
+                    .' for this check to resolve',
+                ['plugin' => $subject->pluginClass()]
+            )];
         }
 
         $ground = $this->groundFor($subject);
