@@ -753,6 +753,605 @@ class TierB10RequirementPathsResolveTest extends TestCase
         $this->assertCount(1, $findings);
         $this->assertTrue($findings[0]->isSkipped());
     }
+
+    // -------------------------------------------------------------------
+    // R-10 — the package-relative ground, for a repo with no core checkout
+    //
+    // Every test below drives TierB10GroundlessInspector rather than the
+    // plain one. That is not a convenience: the root ladder's fourth rung
+    // derives <core>/include from *this installer package's* own location,
+    // and this suite is itself run from inside a MyAdmin checkout, where
+    // that rung succeeds. Asking the real inspector for a rootless verdict
+    // here would therefore answer "root available" on a developer machine
+    // and "no root" in the installer's own CI — the same environment-shaped
+    // flapping B-10 exists to expose. The subclass pins the one input under
+    // test (no root) and leaves everything else real: the same inspect(),
+    // the same real Loader, the same on-disk fixtures.
+    //
+    // The end-to-end demonstration against the unmodified inspector, in a
+    // process where rung 4 genuinely fails, is R-10's standalone proof and
+    // is not reproducible as a unit test for exactly the reason above.
+    // -------------------------------------------------------------------
+
+    /**
+     * The shape Phase 4 actually runs in: a checkout at
+     * `/home/runner/work/<pkg>/<pkg>` with no `vendor/` above it, no `include/` anywhere,
+     * and `INCLUDE_ROOT` undefined. The registered path is written relative to core's
+     * `include/` — `/../vendor/<name>/src/...` — but it lands inside this very package, so
+     * `packageDir()` is all the ground it needs.
+     *
+     * Both directions in one test, deliberately: a rule that only ever fails is not a check,
+     * it is an outage.
+     *
+     * @return void
+     */
+    public function testSelfReferencingSourceIsJudgedAgainstThePackageWhenThereIsNoCoreRoot()
+    {
+        list($class, $packageDir) = $this->makeStandalonePackage(
+            'Tests\MyAdmin\Plugins\Testing\Contract\StandaloneB10',
+            'acme/myadmin-widget-plugin',
+            ['/src/present.php'],
+            [
+                'present_thing' => '/../vendor/acme/myadmin-widget-plugin/src/present.php',
+                'missing_thing' => '/../vendor/acme/myadmin-widget-plugin/src/missing.php',
+            ]
+        );
+
+        $findings = $this->inspectGroundless($class);
+        $this->assertCount(1, $findings, 'the path whose file exists must produce nothing at all');
+        $this->assertTrue($findings[0]->isFailure());
+        $this->assertSame('missing_thing', $findings[0]->context()['function']);
+        $this->assertStringContainsString('missing.php', $findings[0]->message());
+        $this->assertStringContainsString('will fatal', $findings[0]->message());
+        $this->assertSame(
+            $packageDir.'/src/missing.php',
+            $findings[0]->context()['resolved'],
+            'the path must be resolved against the package directory, not against a guessed root'
+        );
+        $this->assertSame(
+            TierB10RequirementPathsResolve::GROUNDING_PACKAGE_RELATIVE,
+            $findings[0]->context()['grounding']
+        );
+    }
+
+    /**
+     * The fix must not fabricate a verdict for a path it cannot see.
+     * `myadmin-fantastico-licensing` registers `/vps/addons/vps_add_fantastico.php`, a
+     * genuinely core-relative path to a file core does not have — a live fatal, and one of
+     * B-10's fifteen fleet failures. Nothing in a standalone checkout can judge it, so it is
+     * a skip, and the reason has to say which kind of skip it is: not "the plugin is
+     * unloadable", not "the handler threw", not "the repo opted out" — this one is answerable
+     * elsewhere.
+     *
+     * @return void
+     */
+    public function testCoreRelativeSourceWithNoCoreRootIsSkippedWithADistinguishableReason()
+    {
+        list($class) = $this->makeStandalonePackage(
+            'Tests\MyAdmin\Plugins\Testing\Contract\StandaloneCoreRelB10',
+            'acme/myadmin-fantastico-shaped',
+            [],
+            ['vps_add_thing' => '/vps/addons/vps_add_thing.php']
+        );
+
+        $findings = $this->inspectGroundless($class);
+        $this->assertCount(1, $findings);
+        $this->assertTrue($findings[0]->isSkipped());
+        $this->assertFalse($findings[0]->isFailure(), 'an unjudgeable path must never be reported as a defect');
+        $this->assertStringContainsString('/vps/addons/vps_add_thing.php', $findings[0]->message());
+        $this->assertStringContainsString('points outside', $findings[0]->message());
+        $this->assertStringContainsString('acme/myadmin-fantastico-shaped', $findings[0]->message());
+        $this->assertSame(
+            TierB10RequirementPathsResolve::GROUNDING_OUTSIDE_PACKAGE,
+            $findings[0]->context()['grounding'],
+            'the matrix has to be able to tell this skip from every other skip B-10 emits'
+        );
+    }
+
+    /**
+     * The fleet's other unjudgeable shape: `fantastico-licensing` registers two paths into
+     * `detain/crud`, a package that is not itself. Pointing at *a* package is not the rule —
+     * pointing at *this* package is.
+     *
+     * @return void
+     */
+    public function testCrossPackageSourceWithNoCoreRootIsSkipped()
+    {
+        list($class) = $this->makeStandalonePackage(
+            'Tests\MyAdmin\Plugins\Testing\Contract\StandaloneCrossB10',
+            'acme/myadmin-widget-plugin',
+            ['/src/present.php'],
+            ['crud_thing' => '/../vendor/detain/crud/src/crud/crud_thing.php']
+        );
+
+        $findings = $this->inspectGroundless($class);
+        $this->assertCount(1, $findings);
+        $this->assertTrue($findings[0]->isSkipped());
+        $this->assertSame(
+            TierB10RequirementPathsResolve::GROUNDING_OUTSIDE_PACKAGE,
+            $findings[0]->context()['grounding']
+        );
+    }
+
+    /**
+     * The needle is `/vendor/<name>/` with both delimiters. Without the trailing one,
+     * `acme/myadmin-widget` would swallow paths belonging to `acme/myadmin-widget-extra` and
+     * resolve them to `<widget>/-extra/src/...`, inventing a dangling path out of a package
+     * that is not even under inspection. The fleet has this collision for real:
+     * `detain/myadmin-cpanel-licensing`, `detain/myadmin-cpanel-webhosting` and
+     * `detain/myadmin-cpanel-vps-addon` all share a prefix.
+     *
+     * @return void
+     */
+    public function testPackageNeedleMatchesOnWholePathSegments()
+    {
+        list($class) = $this->makeStandalonePackage(
+            'Tests\MyAdmin\Plugins\Testing\Contract\StandaloneSegmentB10',
+            'acme/myadmin-widget',
+            [],
+            ['neighbour_thing' => '/../vendor/acme/myadmin-widget-extra/src/thing.php']
+        );
+
+        $findings = $this->inspectGroundless($class);
+        $this->assertCount(1, $findings);
+        $this->assertTrue(
+            $findings[0]->isSkipped(),
+            'a sibling package with a shared name prefix is outside this package, not inside it'
+        );
+    }
+
+    /**
+     * The other half of the needle. `vendor/` has to be a whole segment too, or
+     * `/../notvendor/acme/myadmin-widget-plugin/src/present.php` — a path into some
+     * lookalike directory that is not the Composer vendor tree at all — would be resolved
+     * against this package and come back green.
+     *
+     * The fixture's file exists, so the wrong answer here is a **pass**, which is the
+     * expensive direction: a check that silently stops checking.
+     *
+     * @return void
+     */
+    public function testPackageNeedleRequiresVendorItselfToBeAWholeSegment()
+    {
+        list($class) = $this->makeStandalonePackage(
+            'Tests\MyAdmin\Plugins\Testing\Contract\StandaloneVendorSegmentB10',
+            'acme/myadmin-widget-plugin',
+            ['/src/present.php'],
+            ['lookalike_thing' => '/../notvendor/acme/myadmin-widget-plugin/src/present.php']
+        );
+
+        $findings = $this->inspectGroundless($class);
+        $this->assertCount(1, $findings, 'a lookalike directory is not this package');
+        $this->assertTrue($findings[0]->isSkipped());
+        $this->assertSame(
+            TierB10RequirementPathsResolve::GROUNDING_OUTSIDE_PACKAGE,
+            $findings[0]->context()['grounding']
+        );
+    }
+
+    /**
+     * The package name comes from the manifest, and it has to: in a standalone checkout the
+     * directory is `<pkg>/<pkg>`, not `<vendor>/<pkg>`, so the directory names say
+     * `myadmin-widget-plugin` twice and would never match the `acme/` the source names. This
+     * fixture's directory is deliberately named nothing like its composer name.
+     *
+     * @return void
+     */
+    public function testPackageNameIsReadFromTheManifestNotTheDirectoryNames()
+    {
+        list($class, $packageDir) = $this->makeStandalonePackage(
+            'Tests\MyAdmin\Plugins\Testing\Contract\StandaloneManifestB10',
+            'acme/myadmin-widget-plugin',
+            ['/src/present.php'],
+            ['present_thing' => '/../vendor/acme/myadmin-widget-plugin/src/present.php'],
+            'a-directory-named-nothing-like-the-package'
+        );
+        $this->assertSame('a-directory-named-nothing-like-the-package', basename($packageDir));
+
+        $this->assertSame(
+            [],
+            $this->inspectGroundless($class),
+            'the manifest name is the only thing that can match the registered path here'
+        );
+    }
+
+    /**
+     * A subject with no manifest — a scratch copy, a fixture — but laid out the way Composer
+     * lays packages out is still identifiable. Second in the order, not first: a manifest
+     * states the name, a directory only implies it.
+     *
+     * @return void
+     */
+    public function testVendorDirectoryLayoutNamesThePackageWhenThereIsNoManifest()
+    {
+        list($class, $packageDir) = $this->makeStandalonePackage(
+            'Tests\MyAdmin\Plugins\Testing\Contract\StandaloneNoManifestB10',
+            null,
+            ['/src/present.php'],
+            [
+                'present_thing' => '/../vendor/acme/myadmin-widget-plugin/src/present.php',
+                'missing_thing' => '/../vendor/acme/myadmin-widget-plugin/src/missing.php',
+            ],
+            'myadmin-widget-plugin',
+            'vendor/acme'
+        );
+        $this->assertFileDoesNotExist($packageDir.'/composer.json');
+
+        $findings = $this->inspectGroundless($class);
+        $this->assertCount(1, $findings);
+        $this->assertTrue($findings[0]->isFailure());
+        $this->assertSame($packageDir.'/src/missing.php', $findings[0]->context()['resolved']);
+    }
+
+    /**
+     * A tail that climbs back out of the package with `..` is answered against whatever
+     * happens to sit beside the package on this machine — which is a verdict about a
+     * directory nobody named, the exact failure mode the root ladder's `is_dir()` gates
+     * refuse. Zero of the fleet's 305 self-referencing sources do this; one that did must be
+     * skipped rather than resolved.
+     *
+     * The fixture points at a file that really does exist outside the package, so a checker
+     * that resolved it would report a confident, wrong **pass**.
+     *
+     * @return void
+     */
+    public function testTailThatClimbsBackOutOfThePackageIsNotJudgedAgainstIt()
+    {
+        $base = $this->makeBase();
+        file_put_contents($base.'/outside.php', "<?php\n");
+
+        list($class) = $this->makeStandalonePackage(
+            'Tests\MyAdmin\Plugins\Testing\Contract\StandaloneEscapeB10',
+            'acme/myadmin-widget-plugin',
+            [],
+            ['escaping_thing' => '/../vendor/acme/myadmin-widget-plugin/../outside.php'],
+            'myadmin-widget-plugin',
+            '',
+            $base
+        );
+
+        $findings = $this->inspectGroundless($class);
+        $this->assertCount(1, $findings);
+        $this->assertTrue(
+            $findings[0]->isSkipped(),
+            'a path that leaves the package again must not be answered from the package'
+        );
+    }
+
+    /**
+     * A tail with `.` and a `..` that cancels out stays inside and is still judged — the
+     * guard is against *escaping*, not against every mention of a dot segment.
+     *
+     * @return void
+     */
+    public function testTailThatStaysInsideThePackageAfterDotSegmentsIsStillJudged()
+    {
+        list($class) = $this->makeStandalonePackage(
+            'Tests\MyAdmin\Plugins\Testing\Contract\StandaloneDotsB10',
+            'acme/myadmin-widget-plugin',
+            ['/src/present.php', '/lib/keep.php'],
+            ['dotted_thing' => '/../vendor/acme/myadmin-widget-plugin/./lib/../src/present.php']
+        );
+
+        $this->assertSame([], $this->inspectGroundless($class));
+    }
+
+    /**
+     * Both grounds must see the same string core would. Core drops everything up to the last
+     * `\` plus one further character, so a source whose *namespace prefix* happens to contain
+     * a `/vendor/<name>/` run does not register that path at all — core would require the
+     * tail. Matching the raw string instead would resolve the decoy and report a failure
+     * about a file core never asks for.
+     *
+     * @return void
+     */
+    public function testNamespaceArmIsAppliedBeforeThePackageNeedleIsMatched()
+    {
+        list($class) = $this->makeStandalonePackage(
+            'Tests\MyAdmin\Plugins\Testing\Contract\StandaloneNsB10',
+            'acme/myadmin-widget-plugin',
+            [],
+            ['decoyed_thing' => '/../vendor/acme/myadmin-widget-plugin/src/decoy.php\\Ysrc/real.php']
+        );
+
+        $findings = $this->inspectGroundless($class);
+        $this->assertCount(1, $findings);
+        $this->assertTrue(
+            $findings[0]->isSkipped(),
+            'after the namespace arm the source is "src/real.php", which names no package at all'
+        );
+        $this->assertSame(
+            TierB10RequirementPathsResolve::GROUNDING_OUTSIDE_PACKAGE,
+            $findings[0]->context()['grounding']
+        );
+    }
+
+    /**
+     * @return void
+     */
+    public function testNonStringSourceIsReportedEvenWithNoCoreRoot()
+    {
+        list($class) = $this->makeStandalonePackage(
+            'Tests\MyAdmin\Plugins\Testing\Contract\StandaloneNonStringB10',
+            'acme/myadmin-widget-plugin',
+            [],
+            ['thing' => 42]
+        );
+
+        $findings = $this->inspectGroundless($class);
+        $this->assertCount(1, $findings);
+        $this->assertTrue($findings[0]->isFailure());
+        $this->assertStringContainsString('not a non-empty string', $findings[0]->message());
+    }
+
+    /**
+     * A finding must never name a root it did not use. `Finding::describe()` renders the
+     * context verbatim into the fleet matrix, and `root=NULL` there would read as "resolved
+     * against the filesystem root" to anyone triaging it.
+     *
+     * @return void
+     */
+    public function testPackageGroundedFindingsCarryNoRootKey()
+    {
+        list($class) = $this->makeStandalonePackage(
+            'Tests\MyAdmin\Plugins\Testing\Contract\StandaloneNoRootKeyB10',
+            'acme/myadmin-widget-plugin',
+            [],
+            [
+                'missing_thing' => '/../vendor/acme/myadmin-widget-plugin/src/missing.php',
+                'core_thing' => '/vps/addons/vps_add_thing.php',
+            ]
+        );
+
+        $findings = $this->inspectGroundless($class);
+        $this->assertCount(2, $findings);
+        foreach ($findings as $finding) {
+            $this->assertArrayNotHasKey('root', $finding->context());
+            $this->assertStringNotContainsString('root=', $finding->describe());
+        }
+    }
+
+    /**
+     * A subject that can be neither rooted nor named has no ground at all, and says so
+     * naming the directory it looked in. Silence here would be the worst of the three
+     * outcomes: a plugin registering paths, none of them checked, reported as compliant.
+     *
+     * @return void
+     */
+    public function testSubjectWithNeitherARootNorANameIsSkippedNamingTheDirectory()
+    {
+        list($class, $packageDir) = $this->makeStandalonePackage(
+            'Tests\MyAdmin\Plugins\Testing\Contract\StandaloneAnonymousB10',
+            null,
+            ['/src/present.php'],
+            ['present_thing' => '/../vendor/acme/myadmin-widget-plugin/src/present.php'],
+            'anonymous-package'
+        );
+
+        $findings = $this->inspectGroundless($class);
+        $this->assertCount(1, $findings);
+        $this->assertTrue($findings[0]->isSkipped());
+        $this->assertStringContainsString($packageDir, $findings[0]->message());
+        $this->assertStringContainsString('could not be identified', $findings[0]->message());
+    }
+
+    // -------------------------------------------------------------------
+    // R-10 — and the ground that was already there keeps winning
+    // -------------------------------------------------------------------
+
+    /**
+     * **The regression guard for the whole change.** The package-relative ground is an
+     * addition, not a replacement: when a core root exists, it decides, and a file sitting in
+     * the package cannot rescue a path that does not resolve under the root.
+     *
+     * Without this, the cheap version of R-10 — resolve everything against `packageDir()` —
+     * looks correct on every fixture in this file and quietly costs the fleet its
+     * `fantastico-licensing` finding, a live 500.
+     *
+     * @return void
+     */
+    public function testACoreRootStillDecidesEvenForASelfReferencingPathThePackageHolds()
+    {
+        list($class, $packageDir) = $this->makeStandalonePackage(
+            'Tests\MyAdmin\Plugins\Testing\Contract\RootWinsB10',
+            'acme/myadmin-widget-plugin',
+            ['/src/present.php'],
+            ['present_thing' => '/../vendor/acme/myadmin-widget-plugin/src/present.php']
+        );
+        $this->assertFileExists($packageDir.'/src/present.php', 'the package really does hold the file');
+
+        // An empty root: nothing resolves under it, so the only way this can come back green
+        // is if the package ground overrode the root.
+        $root = $this->makeRoot();
+        $findings = $this->inspector->inspect(new PluginSubject($class, ['requirementRoot' => $root]));
+
+        $this->assertCount(1, $findings);
+        $this->assertTrue($findings[0]->isFailure(), 'the root decides when there is one');
+        $this->assertSame($root, $findings[0]->context()['root']);
+        $this->assertArrayNotHasKey(
+            'grounding',
+            $findings[0]->context(),
+            'a root-grounded finding must stay byte-identical to what the fleet matrix committed'
+        );
+    }
+
+    /**
+     * The `fantastico-licensing` shape under a real root: still a failure, not the new skip.
+     * If the "points outside the package" skip ever leaked into root mode it would convert
+     * that package's cell from fail to skip and drop B-10 from fifteen failing packages to
+     * fourteen.
+     *
+     * @return void
+     */
+    public function testCoreRelativePathUnderACoreRootIsStillAFailureAndNeverTheNewSkip()
+    {
+        list($class) = $this->makeStandalonePackage(
+            'Tests\MyAdmin\Plugins\Testing\Contract\RootCoreRelB10',
+            'acme/myadmin-fantastico-shaped',
+            [],
+            ['vps_add_thing' => '/vps/addons/vps_add_thing.php']
+        );
+
+        $root = $this->makeRoot();
+        $findings = $this->inspector->inspect(new PluginSubject($class, ['requirementRoot' => $root]));
+
+        $this->assertCount(1, $findings);
+        $this->assertTrue($findings[0]->isFailure());
+        $this->assertSame($root.'/vps/addons/vps_add_thing.php', $findings[0]->context()['resolved']);
+    }
+
+    /**
+     * The explicit opt-out is an opt-out from the assertion, not from one way of resolving
+     * it. A repo that switched B-10 off does not get it switched back on by a ground it never
+     * asked about.
+     *
+     * @return void
+     */
+    public function testExplicitOptOutIsNotResurrectedByThePackageGround()
+    {
+        list($class) = $this->makeStandalonePackage(
+            'Tests\MyAdmin\Plugins\Testing\Contract\OptedOutStandaloneB10',
+            'acme/myadmin-widget-plugin',
+            [],
+            ['missing_thing' => '/../vendor/acme/myadmin-widget-plugin/src/missing.php']
+        );
+
+        $findings = (new TierB10GroundlessInspector())->inspect(
+            new PluginSubject($class, ['requirementRoot' => null])
+        );
+        $this->assertCount(1, $findings);
+        $this->assertTrue($findings[0]->isSkipped());
+        $this->assertSame('requirementRoot', $findings[0]->context()['override']);
+    }
+
+    /**
+     * A `requirementRoot()` naming a non-directory still short-circuits. Substituting the
+     * package ground for the root the repo named is the same mistake as substituting a
+     * derived root for it — a verdict about a directory nobody asked for.
+     *
+     * The fixture's file exists, so a fall-through would come back green and the repo would
+     * never learn its hatch is broken.
+     *
+     * @return void
+     */
+    public function testBadExplicitRootDoesNotFallThroughToThePackageGround()
+    {
+        list($class) = $this->makeStandalonePackage(
+            'Tests\MyAdmin\Plugins\Testing\Contract\BadRootStandaloneB10',
+            'acme/myadmin-widget-plugin',
+            ['/src/present.php'],
+            ['present_thing' => '/../vendor/acme/myadmin-widget-plugin/src/present.php']
+        );
+
+        $absent = $this->makeBase().'/no-such-directory-at-all';
+        $findings = (new TierB10GroundlessInspector())->inspect(
+            new PluginSubject($class, ['requirementRoot' => $absent])
+        );
+        $this->assertCount(1, $findings);
+        $this->assertTrue($findings[0]->isSkipped());
+        $this->assertStringContainsString('not a directory', $findings[0]->message());
+    }
+
+    // -------------------------------------------------------------------
+    // Helpers for the R-10 fixtures
+    // -------------------------------------------------------------------
+
+    /**
+     * @param string $class
+     * @return array<int,Finding>
+     */
+    private function inspectGroundless($class)
+    {
+        return (new TierB10GroundlessInspector())->inspect(new PluginSubject($class));
+    }
+
+    /**
+     * Writes a package on disk and returns its plugin class and directory.
+     *
+     * The plugin source is generated rather than declared inline because the whole point is
+     * where the class *lives*: `PluginSubject::packageDir()` reads the reflected file name, so
+     * a fixture declared at the bottom of this file would always report this repository's
+     * `tests/` directory no matter what the test is about.
+     *
+     * @param string              $namespace    unique per fixture; the class is `<namespace>\Plugin`
+     * @param string|null         $composerName written to composer.json, or null to ship no manifest
+     * @param array<int,string>   $files        files to create inside the package
+     * @param array<string,mixed> $sources      requirement table the plugin registers
+     * @param string              $dirName      package directory name
+     * @param string              $under        path between the scratch base and the package
+     * @param string|null         $base         scratch base, or null for a fresh one
+     * @return array{0:string,1:string} [plugin class, absolute package dir]
+     */
+    private function makeStandalonePackage(
+        $namespace,
+        $composerName,
+        array $files,
+        array $sources,
+        $dirName = 'myadmin-widget-plugin',
+        $under = '',
+        $base = null
+    ) {
+        $base = $base === null ? $this->makeBase() : $base;
+        $packageDir = $base.($under === '' ? '' : '/'.$under).'/'.$dirName;
+        mkdir($packageDir.'/src', 0777, true);
+
+        if ($composerName !== null) {
+            file_put_contents(
+                $packageDir.'/composer.json',
+                (string)json_encode(['name' => $composerName, 'type' => 'myadmin-plugin'])
+            );
+        }
+        foreach ($files as $relative) {
+            $full = $packageDir.'/'.ltrim($relative, '/');
+            if (!is_dir(dirname($full))) {
+                mkdir(dirname($full), 0777, true);
+            }
+            file_put_contents($full, "<?php\n");
+        }
+
+        $source = "<?php\n\nnamespace ".$namespace.";\n\n"
+            ."class Plugin\n{\n"
+            ."    public static function getHooks()\n    {\n"
+            ."        return ['function.requirements' => [__CLASS__, 'getRequirements']];\n"
+            ."    }\n\n"
+            ."    public static function getRequirements(\$event)\n    {\n"
+            ."        \$loader = \$event->getSubject();\n"
+            ."        foreach (".var_export($sources, true)." as \$function => \$source) {\n"
+            ."            \$loader->add_requirement(\$function, \$source);\n"
+            ."        }\n"
+            ."    }\n}\n";
+        file_put_contents($packageDir.'/src/Plugin.php', $source);
+        require_once $packageDir.'/src/Plugin.php';
+
+        return [$namespace.'\\Plugin', $packageDir];
+    }
+}
+
+/**
+ * The inspector with the root ladder pinned empty — the standalone environment, made
+ * deterministic.
+ *
+ * Overriding a public method of the class under test is normally a smell. Here it is the only
+ * honest option: rung 4 of the ladder derives `<core>/include` from the *installer package's*
+ * own location, and this suite runs from inside a MyAdmin checkout, so the real inspector
+ * finds a root on a developer machine and finds none in the installer's own CI. A test that
+ * inherited that split would assert the new ground in one place and assert nothing in the
+ * other, which is precisely the "green here, grey there" reading R-10 exists to end.
+ *
+ * Nothing else is stubbed. `inspect()`, the real `Loader`, the real handler dispatch, the real
+ * on-disk lookups and every other rung's `is_dir()` gate are the production ones; the ladder's
+ * *result* is the single pinned input.
+ */
+class TierB10GroundlessInspector extends TierB10RequirementPathsResolve
+{
+    /**
+     * @param PluginSubject $subject
+     * @return null
+     */
+    public function requirementRootFor(PluginSubject $subject)
+    {
+        return null;
+    }
 }
 
 // -----------------------------------------------------------------------
