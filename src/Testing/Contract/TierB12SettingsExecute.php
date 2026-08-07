@@ -348,9 +348,10 @@ class TierB12SettingsExecute implements PluginInspector
      * Otherwise the handler is orphaned, which is not a skip but a not-applicable — see
      * {@see orphaned()} for why that distinction is worth the paragraph it takes to defend.
      *
-     * The table is read through {@see TierA5HooksAreIdempotent::hookTable()} rather than by
-     * calling `getHooks()` here, for the reason that helper exists: two inspectors that
-     * separately decide "can getHooks() be called?" are two inspectors that can disagree.
+     * The structural half of the question — which keys name this class's `getSettings` — is
+     * {@see HookTargetIndex}'s, shared with {@see TierB16ApiRegisterExecute}, which asks the
+     * identical question about `apiRegister`. Only the *wording* stays here: the sentence a
+     * reader needs is about settings pages, not about hook tables.
      *
      * Reading the table *after* the handler ran cannot manufacture a verdict either way,
      * because the caller has already snapshotted what the handler registered. Belt and
@@ -363,7 +364,8 @@ class TierB12SettingsExecute implements PluginInspector
      */
     private function reachability(PluginSubject $subject)
     {
-        $hooks = TierA5HooksAreIdempotent::hookTable($subject);
+        $index = HookTargetIndex::keysTargeting($subject, self::METHOD);
+        $hooks = $index['hooks'];
         if ($hooks === null) {
             return Finding::skipped(
                 self::ID,
@@ -385,31 +387,11 @@ class TierB12SettingsExecute implements PluginInspector
             );
         }
 
-        $names = $this->subjectClassNames($subject);
-        $keys = [];
-        $pairs = 0;
-        foreach ($hooks as $key => $value) {
-            $target = self::targetOf($value);
-            if ($target === null) {
-                continue;
-            }
-            $pairs++;
-            if (strcasecmp($target['method'], self::METHOD) !== 0) {
-                continue;
-            }
-            // PHP class names are case-insensitive, and a hook may legitimately name a
-            // parent class, so compare against the whole ancestry rather than one string.
-            if (!in_array(strtolower(ltrim($target['class'], '\\')), $names, true)) {
-                continue;
-            }
-            $keys[] = (string)$key;
+        if ($index['keys'] !== []) {
+            return $index['keys'];
         }
 
-        if ($keys !== []) {
-            return $keys;
-        }
-
-        if ($hooks !== [] && $pairs === 0) {
+        if ($hooks !== [] && $index['pairs'] === 0) {
             return Finding::skipped(
                 self::ID,
                 sprintf(
@@ -515,62 +497,6 @@ class TierB12SettingsExecute implements PluginInspector
                 'hookKeys' => implode(',', array_keys($hooks)),
             ]
         );
-    }
-
-    /**
-     * Every class name a hook may legitimately use to name this plugin's handler, lowercased
-     * and without a leading separator.
-     *
-     * Covers the declaring class and the whole parent chain so an inherited `getSettings`
-     * registered as `[ParentPlugin::class, 'getSettings']` still counts as reachable. Built
-     * from reflection metadata already in hand, so it can never autoload — resolving a hook's
-     * named class is {@see TierB9HookTargetsResolve}'s job, not this one's.
-     *
-     * @param \MyAdmin\Plugins\Testing\Contract\PluginSubject $subject
-     * @return array<int,string>
-     */
-    private function subjectClassNames(PluginSubject $subject)
-    {
-        $reflection = $subject->reflection();
-        $names = [strtolower(ltrim($reflection->getName(), '\\'))];
-        $names[] = strtolower(ltrim(
-            $reflection->getMethod(self::METHOD)->getDeclaringClass()->getName(),
-            '\\'
-        ));
-        for ($parent = $reflection->getParentClass(); $parent !== false; $parent = $parent->getParentClass()) {
-            $names[] = strtolower(ltrim($parent->getName(), '\\'));
-        }
-        return array_values(array_unique($names));
-    }
-
-    /**
-     * The `[class, method]` a hook value names, or null when it names neither.
-     *
-     * Accepts the `[__CLASS__, 'getSettings']` form every fleet package uses and the
-     * `'Class::method'` string form `call_user_func()` also honours. Anything else returns
-     * null and is counted as unparseable rather than as "not getSettings", which is what lets
-     * {@see reachability()} tell "this hook targets something else" apart from "this hook
-     * table is malformed and A-8 should say so".
-     *
-     * @param mixed $value
-     * @return array{class:string,method:string}|null
-     */
-    private static function targetOf($value)
-    {
-        if (is_array($value) && count($value) === 2 && isset($value[0], $value[1]) && is_string($value[1])) {
-            if (is_object($value[0])) {
-                return ['class' => get_class($value[0]), 'method' => $value[1]];
-            }
-            if (is_string($value[0])) {
-                return ['class' => $value[0], 'method' => $value[1]];
-            }
-            return null;
-        }
-        if (is_string($value) && strpos($value, '::') !== false) {
-            $parts = explode('::', $value, 2);
-            return ['class' => $parts[0], 'method' => $parts[1]];
-        }
-        return null;
     }
 
     // -----------------------------------------------------------------------

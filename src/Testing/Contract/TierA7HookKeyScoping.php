@@ -25,6 +25,13 @@ use MyAdmin\Plugins\Testing\ConstantStub;
  * builds its keys as `self::$module.'.activate'`, which makes the mismatch impossible by
  * construction; the moment someone writes the string literally, nothing catches it.
  *
+ * "Silently inert" is accurate **here** and is not the story {@see TierB9HookTargetsResolve}
+ * tells. A mis-scoped key names a handler that exists: the callable resolves, the listener
+ * registers, and the only thing missing is a dispatch. A *dangling* target is louder and
+ * worse — it throws out of Symfony's listener optimisation and takes every other listener on
+ * that key with it. The two are checked separately because they break separately, and the
+ * failure narratives must not be copied between them.
+ *
  * ---------------------------------------------------------------------------------
  * THE RULE, ASSERTED IN BOTH DIRECTIONS
  * ---------------------------------------------------------------------------------

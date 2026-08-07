@@ -23,9 +23,9 @@ use Throwable;
  *
  * Kept out of `Contract/` **deliberately and load-bearingly**.
  * {@see Contract\InspectorRegistry::classes()} globs `src/Testing/Contract/*.php` and adds
- * every {@see Contract\PluginInspector} it finds to the seventeen-assertion catalogue. A
+ * every {@see Contract\PluginInspector} it finds to the eighteen-assertion catalogue. A
  * probe placed there — even one that never implemented the interface — is one refactor away
- * from becoming an eighteenth matrix column and silently changing the 1207-cell census gate
+ * from becoming a nineteenth matrix column and silently changing the 1278-cell census gate
  * G2 is reviewed against. Phase 3 is a *separate test case*, not a new catalogue assertion,
  * and this file's location is how that stays true.
  *

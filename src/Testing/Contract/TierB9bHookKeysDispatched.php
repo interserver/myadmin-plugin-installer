@@ -17,6 +17,14 @@ use Throwable;
  * question: whether anything ever fires the *key*. Both halves have to hold for a listener to
  * run, and they fail independently.
  *
+ * They also **fail differently**, which is worth stating because the two were once described
+ * in the same words and the shared wording was wrong for B-9. A key nothing dispatches is
+ * genuinely silent: the target resolves, `Closure::fromCallable()` succeeds, the listener is
+ * registered, and the event is simply never fired. Nothing throws, ever, and there is nothing
+ * to log. A *dangling target* is not silent — see {@see TierB9HookTargetsResolve}, where it
+ * threw a `TypeError` out of Symfony's listener optimisation and 500'd a shared admin page.
+ * Do not carry that class's failure story over to this one, or this one's over to it.
+ *
  * ---------------------------------------------------------------------------------
  * WHY THIS IS A SEPARATE CATALOGUE ENTRY
  * ---------------------------------------------------------------------------------

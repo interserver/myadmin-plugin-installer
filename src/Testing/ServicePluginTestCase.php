@@ -15,7 +15,7 @@ use Throwable;
 
 /**
  * Behavioural assertions for a plugin's service-lifecycle handlers, on top of the
- * seventeen structural ones {@see PluginContractTestCase} already runs.
+ * eighteen structural ones {@see PluginContractTestCase} already runs.
  *
  * A repo gets both by changing which class it extends:
  *
@@ -164,7 +164,7 @@ use Throwable;
  * ---------------------------------------------------------------------------------
  * {@see Contract\InspectorRegistry::classes()} discovers inspectors by globbing
  * `src/Testing/Contract/`. Two inspectors there would become two new columns and turn the
- * G2 fleet matrix from 17x71 into 19x71, changing the 1207-cell census the gate is reviewed
+ * G2 fleet matrix from 18x71 into 20x71, changing the 1278-cell census the gate is reviewed
  * against. Phase 3 is additive to a repo's own test run and deliberately invisible to the
  * matrix; nothing in this phase lives under `Contract/`.
  *
@@ -193,7 +193,7 @@ abstract class ServicePluginTestCase extends PluginContractTestCase
      * Structured, static and separate from {@see PluginContractTestCase::overrideLedger()}
      * for the reasons that ledger's docblock gives, plus one specific to here:
      * {@see PluginSubject} declares exactly four hatches and `overridesInUse()` is driven by
-     * that list. Teaching it a fifth would touch a class every one of the seventeen
+     * that list. Teaching it a fifth would touch a class every one of the eighteen
      * inspectors depends on, to record something none of them can act on. The hatch is real
      * — a repo that declares a narrow `handledTypes()` can make assertion A pass on a type it
      * chose and assertion B never look at the ones it left out — so it is logged here rather

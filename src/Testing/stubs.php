@@ -221,6 +221,64 @@ if (!function_exists('generate_password')) {
     }
 }
 
+if (!function_exists('api_register')) {
+    /**
+     * The `api.register` surface: three bare functions in
+     * `include/Api/api.functions.inc.php` that write straight into globals, dispatched
+     * by `api_register_init()`. Nine fleet packages implement the handler and 63 fleet
+     * `api_register*()` calls pass through here.
+     *
+     * The `function_exists()` guard is not decorative for these three. Core's
+     * `api.functions.inc.php` is `require_once`d by the API entry points, so a process
+     * that has bootstrapped enough of core to reach one already owns these names, and
+     * redeclaring would be a fatal.
+     *
+     * Signature verbatim from `api.functions.inc.php:176` — note `$logged_in` and
+     * `$wrap` default to **true**, which is what makes an omitted argument mean
+     * "session-checked and prefixed with api_".
+     *
+     * @param string $function
+     * @param mixed  $input
+     * @param mixed  $output
+     * @param string $label
+     * @param bool   $logged_in
+     * @param bool   $wrap
+     * @return void
+     */
+    function api_register($function, $input, $output, $label = '', $logged_in = true, $wrap = true)
+    {
+        Harness::api()->api_register($function, $input, $output, $label, $logged_in, $wrap);
+    }
+}
+
+if (!function_exists('api_register_array')) {
+    /**
+     * Registers a complex type. Signature verbatim from `api.functions.inc.php:201`.
+     *
+     * @param string $function
+     * @param mixed  $data
+     * @return void
+     */
+    function api_register_array($function, $data)
+    {
+        Harness::api()->api_register_array($function, $data);
+    }
+}
+
+if (!function_exists('api_register_array_array')) {
+    /**
+     * Registers an array-of-a-type. Signature verbatim from `api.functions.inc.php:156`.
+     *
+     * @param string $arraysName
+     * @param string $targetArray
+     * @return void
+     */
+    function api_register_array_array($arraysName, $targetArray)
+    {
+        Harness::api()->api_register_array_array($arraysName, $targetArray);
+    }
+}
+
 if (!function_exists('slugify')) {
     /**
      * Core's `Settings` uses this to key sections and categories. Defined here

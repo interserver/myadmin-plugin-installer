@@ -647,6 +647,146 @@ class FleetMatrixTest extends TestCase
     }
 
     // -----------------------------------------------------------------------
+    // Deferrals — the other kind of exemption
+    // -----------------------------------------------------------------------
+
+    /**
+     * Same argument as the hatch section: "nobody defers anything" and "deferrals were never
+     * looked for" must not render identically, so the section is unconditional.
+     *
+     * @return void
+     */
+    public function testTheDeferralSectionIsPresentEvenWhenNoPackageDefersAnything()
+    {
+        $markdown = FleetMatrix::renderMarkdown($this->rows(), self::IDS);
+
+        $this->assertStringContainsString('## Deferrals', $markdown);
+        $this->assertStringContainsString('No package defers a catalogue assertion.', $markdown);
+    }
+
+    /**
+     * @return void
+     */
+    public function testDeferralsAreCollectedFromTheRecordsThatCarryThem()
+    {
+        $records = [
+            ['package' => 'a/one', 'deferrals' => [], 'deferralProblems' => []],
+            ['package' => 'b/two', 'deferrals' => ['B-10' => ['until' => '2099-01-01']], 'deferralProblems' => []],
+            ['package' => 'c/three', 'deferrals' => [], 'deferralProblems' => ['broken']],
+            ['package' => 'd/four'],
+        ];
+
+        $collected = FleetMatrix::collectDeferrals($records);
+
+        $this->assertSame(['b/two', 'c/three'], array_keys($collected));
+        $this->assertSame(['B-10'], array_keys($collected['b/two']['deferrals']));
+        $this->assertSame(['broken'], $collected['c/three']['problems']);
+        $this->assertSame([], FleetMatrix::collectDeferrals([]));
+    }
+
+    /**
+     * A deferral is a record, not an override: the cell it names keeps whatever verdict the
+     * fleet run produced, and the row says which one that was.
+     *
+     * @return void
+     */
+    public function testADeferralIsDisclosedWithoutChangingTheCellItNames()
+    {
+        $markdown = FleetMatrix::renderMarkdown($this->rows(), self::IDS, [
+            'deferrals' => [
+                'b/two' => [
+                    'deferrals' => ['B-10' => [
+                        'until' => '2099-01-01',
+                        'issue' => 'plugin_plan.md Phase 5',
+                        'findings' => ['one', 'two'],
+                    ]],
+                    'problems' => [],
+                ],
+            ],
+        ]);
+
+        $this->assertStringContainsString('| two | B-10 | 2099-01-01 | fail | active | plugin_plan.md Phase 5 | 2 |', $markdown);
+        // The census and the grid must be untouched: b/two's B-10 is still a failure.
+        $this->assertStringContainsString('| B-10 | 0 | 1 | 0 | 1 |', $markdown);
+        $this->assertStringContainsString('| two | . | - | **F** |', $markdown);
+    }
+
+    /**
+     * The fleet-side staleness check. The package's own suite enforces this against its own
+     * run; a deferral whose cell is no longer failing has nothing left to defer, and the
+     * document says so rather than listing it as a live exemption.
+     *
+     * @return void
+     */
+    public function testADeferralWhoseCellIsNotFailingIsMarkedStale()
+    {
+        $markdown = FleetMatrix::renderMarkdown($this->rows(), self::IDS, [
+            'deferrals' => [
+                'a/one' => [
+                    'deferrals' => ['B-10' => ['until' => '2099-01-01', 'issue' => 'x', 'findings' => ['one']]],
+                    'problems' => [],
+                ],
+            ],
+        ]);
+
+        $this->assertStringContainsString('| one | B-10 | 2099-01-01 | not-applicable | **stale** |', $markdown);
+    }
+
+    /**
+     * A long-past `until` renders exactly like a current one, and the document says nothing
+     * about expiry.
+     *
+     * This pins a deliberate omission, so it is worth stating why. The matrix is generated and
+     * `--check`ed in CI. A clock-dependent cell would make it go stale on a *date* rather than
+     * on a *change*, turning a build red for a reason unrelated to the commit under test — and
+     * the first thing anyone does with a build that fails for no reason is regenerate the file
+     * to make it quiet, which is precisely how a document stops being read.
+     *
+     * Nothing is lost by omitting it. Expiry is enforced in {@see DeferredContractDefects},
+     * which fails the owning package's own suite past `until`; and the `until` column is
+     * printed right here, so a reader can see the date has passed. What is dropped is the
+     * derived claim, never the fact.
+     *
+     * @return void
+     */
+    public function testAnExpiredDeferralIsNotMarkedExpiredBecauseTheMatrixMustStayDeterministic()
+    {
+        $markdown = FleetMatrix::renderMarkdown($this->rows(), self::IDS, [
+            'deferrals' => [
+                'b/two' => [
+                    'deferrals' => ['B-10' => ['until' => '2000-01-01', 'issue' => 'x', 'findings' => ['one']]],
+                    'problems' => [],
+                ],
+            ],
+        ]);
+
+        $this->assertStringNotContainsString('expired', $markdown);
+        $this->assertStringContainsString('| two | B-10 | 2000-01-01 | fail | active |', $markdown);
+    }
+
+    /**
+     * A register that cannot be read defers nothing while reading as though it defers
+     * something, so the document reports it rather than omitting the package.
+     *
+     * @return void
+     */
+    public function testAMalformedRegisterIsReportedInFull()
+    {
+        $markdown = FleetMatrix::renderMarkdown($this->rows(), self::IDS, [
+            'deferrals' => [
+                'b/two' => [
+                    'deferrals' => ['B-10' => ['until' => 'soon', 'issue' => 'x', 'findings' => ['one']]],
+                    'problems' => ['B-10: "until" (soon) is not a date strtotime() can read'],
+                ],
+            ],
+        ]);
+
+        $this->assertStringContainsString('**malformed**', $markdown);
+        $this->assertStringContainsString('Malformed registers — these defer nothing', $markdown);
+        $this->assertStringContainsString('is not a date strtotime() can read', $markdown);
+    }
+
+    // -----------------------------------------------------------------------
     // The shim's wiring
     // -----------------------------------------------------------------------
 
@@ -682,6 +822,13 @@ class FleetMatrixTest extends TestCase
         $this->assertIsArray($record, 'the child must emit one decodable JSON record');
         $this->assertArrayHasKey('cells', $record);
         $this->assertArrayHasKey('hatches', $record, 'the hatch ledger must travel with the verdicts');
+        $this->assertArrayHasKey(
+            'deferrals',
+            $record,
+            'the deferral register must travel with the verdicts too — it is the only channel the'
+            .' fleet document has for it, since this process cannot load a package\'s test classes'
+        );
+        $this->assertArrayHasKey('deferralProblems', $record);
         $this->assertNotSame([], $record['cells']);
     }
 

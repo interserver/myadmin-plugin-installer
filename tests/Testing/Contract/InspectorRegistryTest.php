@@ -19,7 +19,7 @@ use ReflectionClass;
  * ---------------------------------------------------------------------------------
  * WHY THE ID LIST IS SPELLED OUT
  * ---------------------------------------------------------------------------------
- * Asserting `count() === 17` would be satisfied by seventeen of the wrong things, and
+ * Asserting `count() === 18` would be satisfied by eighteen of the wrong things, and
  * satisfied again after someone swaps one inspector for another. The catalogue is the
  * contract; pinning it literally means adding an assertion has to be an explicit, reviewed
  * edit to this file rather than a number that silently ticks over. That is the same failure
@@ -53,7 +53,7 @@ class InspectorRegistryTest extends TestCase
      */
     private const CATALOGUE = [
         'A-1', 'A-2', 'A-3', 'A-4', 'A-5', 'A-6', 'A-7', 'A-8', 'A-9',
-        'B-9', 'B-9b', 'B-10', 'B-11', 'B-12', 'B-13', 'B-14', 'B-15',
+        'B-9', 'B-9b', 'B-10', 'B-11', 'B-12', 'B-13', 'B-14', 'B-15', 'B-16',
     ];
 
     /**
@@ -65,6 +65,7 @@ class InspectorRegistryTest extends TestCase
      */
     private const NEIGHBOURS = [
         'Finding',
+        'HookTargetIndex',
         'PluginSubject',
         'SubjectEvent',
         'TierB11RecordingLoader',

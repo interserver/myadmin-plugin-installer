@@ -74,7 +74,7 @@ use Throwable;
  * data by scraping human-readable failure text breaks the first time a message is reworded.
  * Entries hold the plugin, the source, the assertion, the outcome, and the override values.
  * Only runs with at least one active hatch are recorded — "logged when used" means the
- * ledger is the hatch record, not a 1173-row transcript of the fleet.
+ * ledger is the hatch record, not a 1278-row transcript of the fleet.
  *
  * The sentinel matters: returning `null` from {@see requirementRoot()} is a deliberate,
  * logged opt-out of the B-10 path check, which is NOT the same as never having
@@ -186,7 +186,7 @@ abstract class PluginContractTestCase extends TestCase
     /**
      * Every run that had at least one escape hatch active — the G2 hatch record.
      *
-     * Static because it has to survive across the seventeen independent PHPUnit test
+     * Static because it has to survive across the eighteen independent PHPUnit test
      * instances of one repo's run, and across the sixty-nine {@see inspectAll()} calls of a
      * fleet sweep, neither of which shares an object.
      *
@@ -248,7 +248,7 @@ abstract class PluginContractTestCase extends TestCase
      * One case per catalogue assertion.
      *
      * Yields class names, not inspector instances: providers run before the test body,
-     * and constructing 17 inspectors during collection would turn a broken inspector
+     * and constructing 18 inspectors during collection would turn a broken inspector
      * into a collection-time error with no useful attribution.
      *
      * @return array<string,array{0:class-string}>
@@ -714,7 +714,7 @@ abstract class PluginContractTestCase extends TestCase
      *
      * The keys of the returned array stay exactly the catalogue ids. The hatch record is a
      * separate channel on purpose: an extra row here would become an extra matrix cell and
-     * quietly change the 17 x 69 census the gate is read against.
+     * quietly change the 18 x 71 census the gate is read against.
      *
      * @param \MyAdmin\Plugins\Testing\Contract\PluginSubject $subject
      * @return array<string,array<int,\MyAdmin\Plugins\Testing\Contract\Finding>>

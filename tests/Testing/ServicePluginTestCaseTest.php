@@ -815,7 +815,7 @@ class ServicePluginTestCaseTest extends TestCase
 
     /**
      * Two inspectors under `Contract/` would become two new fleet-matrix columns and change
-     * the 1207-cell census gate G2 is reviewed against. Nothing in this phase may live there.
+     * the 1278-cell census gate G2 is reviewed against. Nothing in this phase may live there.
      *
      * @return void
      */

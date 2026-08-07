@@ -9,6 +9,7 @@
 namespace MyAdmin\Plugins\Testing;
 
 use MyAdmin\Plugins\Testing\Fakes\FakeAccounts;
+use MyAdmin\Plugins\Testing\Fakes\FakeApi;
 use MyAdmin\Plugins\Testing\Fakes\FakeApp;
 use MyAdmin\Plugins\Testing\Fakes\FakeDb;
 use MyAdmin\Plugins\Testing\Fakes\FakeEvents;
@@ -64,6 +65,9 @@ class Harness
 
     /** @var \MyAdmin\Plugins\Testing\Fakes\FakeOutput|null */
     private static $output;
+
+    /** @var \MyAdmin\Plugins\Testing\Fakes\FakeApi|null */
+    private static $api;
 
     /**
      * Permissions `has_acl()` answers true for.
@@ -233,6 +237,19 @@ class Harness
     }
 
     /**
+     * The sink the `api_register*()` stubs write into.
+     *
+     * @return \MyAdmin\Plugins\Testing\Fakes\FakeApi
+     */
+    public static function api()
+    {
+        if (self::$api === null) {
+            self::$api = new FakeApi();
+        }
+        return self::$api;
+    }
+
+    /**
      * The log sink. Static class, returned as a name for symmetry with the
      * other accessors.
      *
@@ -381,7 +398,7 @@ class Harness
      * Installs a fake, replacing whatever is there. Used by `Bootstrap::init()`
      * and by a test that wants a pre-seeded double.
      *
-     * @param string $name settings|menu|db|history|session|accounts|variables|smarty|table|events|output
+     * @param string $name settings|menu|db|history|session|accounts|variables|smarty|table|events|output|api
      * @param object $fake
      * @return void
      */
@@ -399,6 +416,7 @@ class Harness
             case 'table':     self::$table = $fake; break;
             case 'events':    self::$events = $fake; break;
             case 'output':    self::$output = $fake; break;
+            case 'api':       self::$api = $fake; break;
             default:
                 throw new \InvalidArgumentException('Unknown harness fake: ' . $name);
         }
@@ -421,7 +439,7 @@ class Harness
         foreach ([
             self::$settings, self::$menu, self::$db, self::$history, self::$session,
             self::$accounts, self::$variables, self::$smarty, self::$table,
-            self::$events, self::$output,
+            self::$events, self::$output, self::$api,
         ] as $fake) {
             if ($fake !== null && method_exists($fake, 'reset')) {
                 $fake->reset();
@@ -455,6 +473,7 @@ class Harness
         self::$table = null;
         self::$events = null;
         self::$output = null;
+        self::$api = null;
         self::$acl = [];
         self::$aclGrantAll = false;
         self::$services = [];

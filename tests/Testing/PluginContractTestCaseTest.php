@@ -132,7 +132,7 @@ class PluginContractTestCaseTest extends TestCase
     }
 
     /**
-     * The ledger is process-global by necessity — seventeen PHPUnit instances and sixty-nine
+     * The ledger is process-global by necessity — eighteen PHPUnit instances and seventy-one
      * fleet subjects have no object to share — so every test that reads it starts from empty
      * and leaves it empty. Without this, an assertion on "the ledger holds one entry" would
      * pass or fail depending on which tests ran first.
@@ -198,7 +198,7 @@ class PluginContractTestCaseTest extends TestCase
 
     /**
      * One case per catalogue assertion, with the id in the key so it lands in the test name.
-     * Without that, a plugin repo's CI reports seventeen indistinguishable rows called
+     * Without that, a plugin repo's CI reports eighteen indistinguishable rows called
      * `testPluginSatisfiesContractAssertion with data set #4`.
      *
      * @return void
@@ -627,7 +627,7 @@ class PluginContractTestCaseTest extends TestCase
 
     /**
      * "Logged when used" — not "logged". A repo that overrides nothing would otherwise
-     * contribute 17 entries per run and 1173 across the fleet, and a hatch record nobody can
+     * contribute 18 entries per run and 1278 across the fleet, and a hatch record nobody can
      * read is the same as no hatch record.
      *
      * @return void
@@ -1074,7 +1074,7 @@ class PluginContractTestCaseTest extends TestCase
     /**
      * A passing contract assertion has to *assert* something. Plugin repos run with
      * `failOnRisky="true"`, so a pass path that recorded no assertion would turn all
-     * seventeen green cases red fleet-wide.
+     * eighteen green cases red fleet-wide.
      *
      * @return void
      */
@@ -1165,7 +1165,7 @@ class PluginContractTestCaseTest extends TestCase
     }
 
     /**
-     * The fleet self-check runs all seventeen inspectors over sixty-nine plugins in one
+     * The fleet self-check runs all eighteen inspectors over seventy-one plugins in one
      * process. One inspector throwing must cost one cell, not the run — and the cell has to
      * say whose bug it is, because at that scale a mislabelled H-bug reads as sixty-nine
      * broken plugins.
@@ -1221,8 +1221,8 @@ class PluginContractTestCaseTest extends TestCase
     }
 
     /**
-     * The hatch record is a side channel, never an extra row. An eighteenth key here would
-     * become an eighteenth matrix cell per package and would move the 17 x 69 census the gate
+     * The hatch record is a side channel, never an extra row. A nineteenth key here would
+     * become a nineteenth matrix cell per package and would move the 18 x 71 census the gate
      * is read against.
      *
      * @return void

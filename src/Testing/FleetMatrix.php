@@ -326,6 +326,44 @@ class FleetMatrix
     }
 
     /**
+     * Deferral registers, keyed by package, from the raw per-package records.
+     *
+     * The sibling of {@see collectHatches()}, and here for the same reason: a deferral is an
+     * exemption from a shared gate, and an exemption nobody can see is the failure mode the
+     * whole deferral mechanism exists to prevent. An escape hatch changes what an assertion
+     * asks; a deferral leaves the assertion alone and excuses the package from its answer
+     * until a date. Both have to be readable in the artefact gate G2 is reviewed against.
+     *
+     * The register is read from each package's `composer.json` by the child process — see
+     * {@see DeferralRegister} for why the declaration lives there and not in a PHPUnit class
+     * this generator can never load. Packages with neither a register nor a complaint about
+     * one are dropped, so this stays a record of exemptions rather than a 71-row transcript.
+     *
+     * @param array<int,array<string,mixed>> $records one decoded child record per package
+     * @return array<string,array{deferrals:array<string,array<string,mixed>>,problems:array<int,string>}>
+     */
+    public static function collectDeferrals(array $records)
+    {
+        $out = [];
+        foreach ($records as $record) {
+            if (!isset($record['package'])) {
+                continue;
+            }
+            $deferrals = isset($record['deferrals']) && is_array($record['deferrals'])
+                ? $record['deferrals']
+                : [];
+            $problems = isset($record['deferralProblems']) && is_array($record['deferralProblems'])
+                ? array_values(array_map('strval', $record['deferralProblems']))
+                : [];
+            if ($deferrals === [] && $problems === []) {
+                continue;
+            }
+            $out[(string)$record['package']] = ['deferrals' => $deferrals, 'problems' => $problems];
+        }
+        return $out;
+    }
+
+    /**
      * Package name as the grid column shows it: vendor prefix and the `myadmin-` marker
      * dropped, because 69 rows of `detain/myadmin-` is 16 characters of nothing.
      *
@@ -357,6 +395,7 @@ class FleetMatrix
      * @param array<string,mixed> $options 'notes' => array<string,string> id => census note,
      *                                     'excluded' => array<string,string> package => why it is not in the fleet,
      *                                     'hatches' => array<string,array<int,array<string,mixed>>> package => ledger entries,
+     *                                     'deferrals' => array<string,array<string,mixed>> package => register + problems,
      *                                     'generator' => string command that reproduces this file
      * @return string markdown
      */
@@ -365,11 +404,13 @@ class FleetMatrix
         $notes = isset($options['notes']) && is_array($options['notes']) ? $options['notes'] : [];
         $excluded = isset($options['excluded']) && is_array($options['excluded']) ? $options['excluded'] : [];
         $hatches = isset($options['hatches']) && is_array($options['hatches']) ? $options['hatches'] : [];
+        $deferrals = isset($options['deferrals']) && is_array($options['deferrals']) ? $options['deferrals'] : [];
         $generator = isset($options['generator']) ? (string)$options['generator'] : 'tools/fleet-matrix.php';
 
         $out = self::renderHeader($rows, $ids, $generator);
         $out .= self::renderCensus($rows, $ids, $notes);
         $out .= self::renderHatches($hatches);
+        $out .= self::renderDeferrals($deferrals, $rows);
         $out .= self::renderExcluded($excluded);
         $out .= self::renderFailures($rows, $ids);
         $out .= self::renderGrid($rows, $ids);
@@ -546,6 +587,108 @@ class FleetMatrix
             }
         }
         return $out."\n";
+    }
+
+    /**
+     * Every assertion a package has declared it is knowingly not fixing yet.
+     *
+     * Rendered even when empty, for the reason {@see renderHatches()} gives: "no package
+     * defers an assertion" and "deferrals were never looked for" are the two readings this
+     * document exists to keep apart.
+     *
+     * **A deferral never moves a cell.** The census and the grid above report the P-bug as the
+     * failure it is; this section records who has agreed not to fix it yet, and by when. That
+     * separation is deliberate — a mechanism that let a package turn a red cell green would be
+     * the silent exemption the mechanism was built to replace.
+     *
+     * The `state` column is the cross-check, and it is the reason this method takes `$rows`.
+     * The repo's own suite enforces expiry and staleness against its own run; this enforces
+     * staleness against the *fleet* run, which is the one a reviewer reads. Expiry is
+     * deliberately not reported here — see {@see deferralState()} for why a generated,
+     * `--check`ed document must not contain a clock-dependent cell:
+     *
+     *  - `stale`     — the cell is not a failure, so there is nothing left to defer. This is
+     *                  the case that matters most, because a deferral whose defect has gone
+     *                  away is an assertion nobody is watching any more.
+     *  - `malformed` — the register could not be read; it defers nothing while looking as
+     *                  though it defers something.
+     *  - `active`    — a real, current, time-boxed exemption.
+     *
+     * @param array<string,array<string,mixed>> $deferrals package => register + problems
+     * @param array<string,array<string,mixed>> $rows      see the class docblock
+     * @return string
+     */
+    private static function renderDeferrals(array $deferrals, array $rows)
+    {
+        $out = "## Deferrals\n\n";
+        if ($deferrals === []) {
+            return $out."No package defers a catalogue assertion. Every failing cell above is an\n"
+                ."open P-bug with nobody's agreement to leave it open.\n\n";
+        }
+
+        ksort($deferrals);
+        $out .= "Assertions a package has declared it is knowingly not fixing yet, from\n"
+            ."`extra.".DeferralRegister::MANIFEST_KEY."` in its own `composer.json`. A deferral does\n"
+            ."**not** change a cell above — the P-bug is still counted as a failure. This is the\n"
+            ."record of who agreed to leave it open, and until when.\n\n"
+            ."| package | assertion | until | cell | state | issue | findings |\n"
+            ."|---|---|---|---|---|---|---|\n";
+        $problems = [];
+        foreach ($deferrals as $package => $entry) {
+            $register = isset($entry['deferrals']) && is_array($entry['deferrals']) ? $entry['deferrals'] : [];
+            $declaredProblems = isset($entry['problems']) && is_array($entry['problems']) ? $entry['problems'] : [];
+            foreach ($declaredProblems as $problem) {
+                $problems[] = self::shortName($package).' — '.$problem;
+            }
+            foreach ($register as $id => $record) {
+                $record = is_array($record) ? $record : [];
+                $verdict = isset($rows[$package]) ? self::verdictAt($rows[$package], (string)$id) : self::MISSING;
+                $out .= '| '.self::shortName($package)
+                    .' | '.$id
+                    .' | '.(isset($record['until']) && is_scalar($record['until']) ? (string)$record['until'] : '?')
+                    .' | '.$verdict
+                    .' | '.self::deferralState($record, $verdict, $declaredProblems)
+                    .' | '.(isset($record['issue']) && is_scalar($record['issue']) ? (string)$record['issue'] : '?')
+                    .' | '.(isset($record['findings']) && is_array($record['findings']) ? count($record['findings']) : 0)
+                    ." |\n";
+            }
+        }
+        if ($problems !== []) {
+            $out .= "\nMalformed registers — these defer nothing and must be fixed or deleted:\n\n";
+            foreach ($problems as $problem) {
+                $out .= '- '.$problem."\n";
+            }
+        }
+        return $out."\n";
+    }
+
+    /**
+     * One deferral's state: a malformed register is not a deferral at all, and a deferral with
+     * no failure left to cover is the quiet one worth chasing.
+     *
+     * Deliberately does NOT report expiry, even though the data is right here. This document is
+     * generated and `--check`ed in CI, so any clock-dependent cell would make a deterministic
+     * artefact go stale on a date rather than on a change — turning a build red for a reason
+     * that has nothing to do with the commit under test. Expiry is enforced where enforcement
+     * belongs, in {@see DeferredContractDefects}, which fails the owning package's own suite
+     * past `until`. The `until` column is printed next to this one, so a reader can see for
+     * themselves that a date has passed; what is dropped is only the *derived* claim, not the
+     * fact.
+     *
+     * @param array<string,mixed> $record
+     * @param string              $verdict the cell the fleet run produced
+     * @param array<int,string>   $problems the whole package's register problems
+     * @return string
+     */
+    private static function deferralState(array $record, $verdict, array $problems)
+    {
+        if ($problems !== []) {
+            return '**malformed**';
+        }
+        if (DeferralRegister::expiresAt($record) === null) {
+            return '**malformed**';
+        }
+        return $verdict === self::FAIL ? 'active' : '**stale**';
     }
 
     /**

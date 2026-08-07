@@ -40,6 +40,7 @@
 
 use MyAdmin\Plugins\Testing\Contract\InspectorRegistry;
 use MyAdmin\Plugins\Testing\Contract\PluginSubject;
+use MyAdmin\Plugins\Testing\DeferralRegister;
 use MyAdmin\Plugins\Testing\FleetMatrix;
 use MyAdmin\Plugins\Testing\PluginContractTestCase;
 
@@ -139,9 +140,10 @@ function fleetMatrixDie($message)
  */
 function fleetMatrixChild($package, $class)
 {
+    $subject = new PluginSubject($class);
     ob_start();
     try {
-        $rows = PluginContractTestCase::inspectAll(new PluginSubject($class));
+        $rows = PluginContractTestCase::inspectAll($subject);
         $stray = strlen((string)ob_get_clean());
     } catch (Throwable $e) {
         ob_end_clean();
@@ -173,6 +175,12 @@ function fleetMatrixChild($package, $class)
         // passing run, which is exactly the case a reviewer needs. The ledger starts empty in
         // every child because each package gets its own process, so no reset is needed here.
         'hatches' => PluginContractTestCase::overrideLedger(),
+        // Deferrals are the other kind of exemption, and the reason they are read here rather
+        // than collected from the package's suite is that this process cannot load that suite.
+        // See MyAdmin\Plugins\Testing\DeferralRegister. They deliberately do NOT alter any
+        // verdict above: a deferred P-bug is still reported as a failing cell.
+        'deferrals' => DeferralRegister::forSubject($subject),
+        'deferralProblems' => DeferralRegister::problemsForSubject($subject),
     ]), "\n";
     return 0;
 }
@@ -215,6 +223,7 @@ function fleetMatrixParent(array $options, $packageRoot)
         'notes' => fleetMatrixNotes($options['notes'], $ids),
         'excluded' => $excluded,
         'hatches' => FleetMatrix::collectHatches($records),
+        'deferrals' => FleetMatrix::collectDeferrals($records),
         'generator' => 'php tools/fleet-matrix.php',
     ]);
 

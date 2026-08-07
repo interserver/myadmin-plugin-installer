@@ -24,15 +24,49 @@ use Throwable;
  *  - take **exactly one** parameter, type-hinted `GenericEvent` (or a subclass).
  *
  * ---------------------------------------------------------------------------------
- * THE BUG CLASS
+ * THE BUG CLASS — AND WHAT IT ACTUALLY DID (corrected)
  * ---------------------------------------------------------------------------------
- * A renamed or deleted handler leaves the hook entry behind. Nothing errors: Symfony's
- * dispatcher stores the array as a lazy callable, and `run_event()` never asserts the target
- * is callable, so the listener simply never fires. The feature stops working, silently, in
- * production, with no log line and no 500. The same is true of a handler that was
- * accidentally made non-static, or whose signature drifted — `getSettings($event)` with the
- * type hint dropped still *runs*, so it hides the day the dispatcher starts passing something
- * else.
+ * A renamed or deleted handler leaves the hook entry behind. An earlier revision of this
+ * docblock asserted that this then fails "silently, in production, with no log line and no
+ * 500", on the reasoning that Symfony stores the array as a lazy callable and nothing asserts
+ * it is callable. **That was false when it was written, and believing it under-rated this
+ * bug class in the Phase 4 risk assessment. It cost a production incident.**
+ *
+ * What really happens, measured: `EventDispatcher::optimizeListeners()` (symfony/event-
+ * dispatcher 5.4) runs `\Closure::fromCallable($listener)` over **every** listener registered
+ * on an event key, the first time that key is dispatched. A `[Class, 'goneMethod']` pair
+ * throws there:
+ *
+ *     TypeError: Failed to create closure from callable:
+ *     class Detain\MyAdminPowerDns\Plugin does not have a method "getSettings"
+ *
+ * Because the listeners for one key are optimised as a batch, that throw kills **all** of
+ * them, not just the broken one. `myadmin-powerdns` deleted `getSettings()` while core's
+ * generated `include/config/hooks.json` still mapped `system.settings` at it; the result was
+ * a hard 500 on the admin System Configuration page, taking roughly twenty other plugins'
+ * settings contributions down with it. It was live on mystage.
+ *
+ * Two properties made it undetectable from the plugin side, and both still hold:
+ *
+ *  - `hooks.json` is a **generated dispatch table committed to a different repository**
+ *    (core). The plugin repo that removes the handler never touches it.
+ *  - It does not self-heal. Core sets `allow-plugins: {detain/myadmin-plugin-installer:
+ *    false}`, so {@see \MyAdmin\Plugins\PluginScanner} never runs on install and the stale
+ *    entry survives every deploy.
+ *
+ * Core has since been hardened — `include/tf.php` now gates `addListener()` on
+ * `is_callable()` (commit `6e06a28a7a`) — so on a current core a dangling target is skipped
+ * at registration instead of fatal at dispatch. That makes the *old* sentence become true
+ * going forward: the listener never fires, no log line, no 500, the feature just stops. The
+ * assertion matters under both regimes, and the difference is only how loudly it hurts:
+ *
+ *  - against a core without the guard, one stale entry is a shared-event 500;
+ *  - against a core with it, the same entry is an invisible dead handler, which is exactly
+ *    the class of defect a green test suite is supposed to stop shipping.
+ *
+ * The same is true of a handler that was accidentally made non-static, or whose signature
+ * drifted — `getSettings($event)` with the type hint dropped still *runs*, so it hides the
+ * day the dispatcher starts passing something else.
  *
  * The fleet's existing reflection tests do not catch any of this. They assert things like
  * "the first parameter is named `$event`" — a check that passes happily on a handler that no

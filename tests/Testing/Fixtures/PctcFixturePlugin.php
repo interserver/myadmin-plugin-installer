@@ -12,7 +12,7 @@ namespace Tests\MyAdmin\Plugins\Testing\Fixtures;
  * The plugin the `PluginContractTestCase` fixtures point at.
  *
  * Deliberately declares no `getHooks()`, `getSettings()` or `getMenu()`. `inspectAll()` is
- * run against it by `PluginContractTestCaseTest`, which means all seventeen real inspectors
+ * run against it by `PluginContractTestCaseTest`, which means all eighteen real inspectors
  * touch it in one process — so it must not cause any of them to execute plugin code, define
  * a constant or emit output. Verified: inspecting this class defines zero new constants,
  * adds zero globals and prints nothing, which is what keeps that test from changing the

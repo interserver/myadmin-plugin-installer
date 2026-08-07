@@ -20,7 +20,7 @@ use MyAdmin\Plugins\Testing\PluginContractTestCase;
  *
  * Lives in `tests/Testing/Fixtures/` rather than at the bottom of the test file because
  * PHPUnit collects every `TestCase` subclass declared in a `*Test.php` file; a fixture
- * subclass there would be run as a test suite of its own against the real seventeen
+ * subclass there would be run as a test suite of its own against the real eighteen
  * inspectors.
  *
  * The two `...ForTest()` accessors are how the protected seams are reached. A subclass
