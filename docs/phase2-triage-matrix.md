@@ -1,6 +1,6 @@
 # Phase 2 — fleet triage matrix (gate G2)
 
-**17 assertions x 71 packages = 1207 cells** — 1016 pass, 18 fail, 5 skip, 168 not applicable.
+**17 assertions x 71 packages = 1207 cells** — 1017 pass, 16 fail, 5 skip, 169 not applicable.
 
 Generated — do not hand-edit. Reproduce with:
 
@@ -37,9 +37,9 @@ result, and it is counted separately above rather than folded into the denominat
 | A-9 | 71 | 0 | 0 | 0 | 0 yield — regression guard |
 | B-9 | 71 | 0 | 0 | 0 | 0 yield — regression guard |
 | B-9b | 70 | 1 | 0 | 0 | cloudlinux dead hooks |
-| B-10 | 38 | 15 | 0 | 18 | dangling requirement paths · n/a: registers no requirement paths at all |
+| B-10 | 39 | 14 | 0 | 18 | dangling requirement paths · n/a: registers no requirement paths at all |
 | B-11 | 28 | 0 | 0 | 43 | n/a: registers no routes, or no function.requirements handler |
-| B-12 | 56 | 1 | 0 | 14 | n/a: orphaned getSettings — core can never invoke it |
+| B-12 | 56 | 0 | 0 | 15 | n/a: orphaned getSettings — core can never invoke it |
 | B-13 | 43 | 0 | 0 | 28 | n/a: no getMenu() |
 | B-14 | 1 | 0 | 5 | 65 | n/a: no getQueue(), or not a service · the 5 skips are dynamic dispatch B-14 cannot read |
 | B-15 | 71 | 0 | 0 | 0 |  |
@@ -63,7 +63,7 @@ against the assertion as written.
   - [B-9b] hook "plugin.install" is never dispatched: it is not one of the literal keys (account.activated, ui.menu, system.settings, mailinglist.subscribe, function.requirements, api.register, licenses.deactivate_key, licenses.deactivate_ip, licenses.change_ip) and its suffix is not one of the per-module suffixes (load_processing, load_addons, queue, activate, settings, deactivate, reactivate, terminate). The handler is dead code — either the dispatch site was removed, or the key is a typo, or a new dispatch site needs adding to TierB9bHookKeysDispatched (plugin='Detain\\MyAdminCloudlinux\\Plugin', hook='plugin.install')
   - [B-9b] hook "plugin.uninstall" is never dispatched: it is not one of the literal keys (account.activated, ui.menu, system.settings, mailinglist.subscribe, function.requirements, api.register, licenses.deactivate_key, licenses.deactivate_ip, licenses.change_ip) and its suffix is not one of the per-module suffixes (load_processing, load_addons, queue, activate, settings, deactivate, reactivate, terminate). The handler is dead code — either the dispatch site was removed, or the key is a typo, or a new dispatch site needs adding to TierB9bHookKeysDispatched (plugin='Detain\\MyAdminCloudlinux\\Plugin', hook='plugin.uninstall')
 
-### B-10 — 15 package(s)
+### B-10 — 14 package(s)
 
 - **detain/myadmin-cpanel-licensing**
   - [B-10] requirement "unbilled_cpanel_old" registers /../vendor/detain/myadmin-cpanel-licensing/src/unbilled_cpanel_old.php, which resolves to /home/sites/mystage/include/../vendor/detain/myadmin-cpanel-licensing/src/unbilled_cpanel_old.php — no such file; function_requirements('unbilled_cpanel_old') will fatal (plugin='MyAdmin\\Licenses\\Cpanel\\Plugin', function='unbilled_cpanel_old', root='/home/sites/mystage/include', source='/../vendor/detain/myadmin-cpanel-licensing/src/unbilled_cpanel_old.php', resolved='/home/sites/mystage/include/../vendor/detain/myadmin-cpanel-licensing/src/unbilled_cpanel_old.php')
@@ -116,9 +116,6 @@ against the assertion as written.
   - [B-10] requirement "deactivate_kcare" registers /../vendor/detain/myadmin-piwik-analytics/src/abuse.inc.php, which resolves to /home/sites/mystage/include/../vendor/detain/myadmin-piwik-analytics/src/abuse.inc.php — no such file; function_requirements('deactivate_kcare') will fatal (plugin='Detain\\MyAdminPiwik\\Plugin', function='deactivate_kcare', root='/home/sites/mystage/include', source='/../vendor/detain/myadmin-piwik-analytics/src/abuse.inc.php', resolved='/home/sites/mystage/include/../vendor/detain/myadmin-piwik-analytics/src/abuse.inc.php')
   - [B-10] requirement "deactivate_abuse" registers /../vendor/detain/myadmin-piwik-analytics/src/abuse.inc.php, which resolves to /home/sites/mystage/include/../vendor/detain/myadmin-piwik-analytics/src/abuse.inc.php — no such file; function_requirements('deactivate_abuse') will fatal (plugin='Detain\\MyAdminPiwik\\Plugin', function='deactivate_abuse', root='/home/sites/mystage/include', source='/../vendor/detain/myadmin-piwik-analytics/src/abuse.inc.php', resolved='/home/sites/mystage/include/../vendor/detain/myadmin-piwik-analytics/src/abuse.inc.php')
   - [B-10] requirement "get_abuse_licenses" registers /../vendor/detain/myadmin-piwik-analytics/src/abuse.inc.php, which resolves to /home/sites/mystage/include/../vendor/detain/myadmin-piwik-analytics/src/abuse.inc.php — no such file; function_requirements('get_abuse_licenses') will fatal (plugin='Detain\\MyAdminPiwik\\Plugin', function='get_abuse_licenses', root='/home/sites/mystage/include', source='/../vendor/detain/myadmin-piwik-analytics/src/abuse.inc.php', resolved='/home/sites/mystage/include/../vendor/detain/myadmin-piwik-analytics/src/abuse.inc.php')
-- **detain/myadmin-powerdns**
-  - [B-10] requirement "add_domain" registers /../vendor/detain/myadmin-powerdns/src/add_domain.php, which resolves to /home/sites/mystage/include/../vendor/detain/myadmin-powerdns/src/add_domain.php — no such file; function_requirements('add_domain') will fatal (plugin='Detain\\MyAdminPowerDns\\Plugin', function='add_domain', root='/home/sites/mystage/include', source='/../vendor/detain/myadmin-powerdns/src/add_domain.php', resolved='/home/sites/mystage/include/../vendor/detain/myadmin-powerdns/src/add_domain.php')
-  - [B-10] requirement "list_domains" registers /../vendor/detain/myadmin-powerdns/src/list_domains.php, which resolves to /home/sites/mystage/include/../vendor/detain/myadmin-powerdns/src/list_domains.php — no such file; function_requirements('list_domains') will fatal (plugin='Detain\\MyAdminPowerDns\\Plugin', function='list_domains', root='/home/sites/mystage/include', source='/../vendor/detain/myadmin-powerdns/src/list_domains.php', resolved='/home/sites/mystage/include/../vendor/detain/myadmin-powerdns/src/list_domains.php')
 - **detain/myadmin-raid-backups**
   - [B-10] requirement "class.Raid" registers /../vendor/detain/myadmin-raid-backups/src/Raid.php, which resolves to /home/sites/mystage/include/../vendor/detain/myadmin-raid-backups/src/Raid.php — no such file; function_requirements('class.Raid') will fatal (plugin='Detain\\MyAdminRaid\\Plugin', function='class.Raid', root='/home/sites/mystage/include', source='/../vendor/detain/myadmin-raid-backups/src/Raid.php', resolved='/home/sites/mystage/include/../vendor/detain/myadmin-raid-backups/src/Raid.php')
   - [B-10] requirement "deactivate_kcare" registers /../vendor/detain/myadmin-raid-backups/src/abuse.inc.php, which resolves to /home/sites/mystage/include/../vendor/detain/myadmin-raid-backups/src/abuse.inc.php — no such file; function_requirements('deactivate_kcare') will fatal (plugin='Detain\\MyAdminRaid\\Plugin', function='deactivate_kcare', root='/home/sites/mystage/include', source='/../vendor/detain/myadmin-raid-backups/src/abuse.inc.php', resolved='/home/sites/mystage/include/../vendor/detain/myadmin-raid-backups/src/abuse.inc.php')
@@ -129,11 +126,6 @@ against the assertion as written.
   - [B-10] requirement "deactivate_kcare" registers /../vendor/detain/myadmin-slack-chat/src/abuse.inc.php, which resolves to /home/sites/mystage/include/../vendor/detain/myadmin-slack-chat/src/abuse.inc.php — no such file; function_requirements('deactivate_kcare') will fatal (plugin='Detain\\MyAdminSlack\\Plugin', function='deactivate_kcare', root='/home/sites/mystage/include', source='/../vendor/detain/myadmin-slack-chat/src/abuse.inc.php', resolved='/home/sites/mystage/include/../vendor/detain/myadmin-slack-chat/src/abuse.inc.php')
   - [B-10] requirement "deactivate_abuse" registers /../vendor/detain/myadmin-slack-chat/src/abuse.inc.php, which resolves to /home/sites/mystage/include/../vendor/detain/myadmin-slack-chat/src/abuse.inc.php — no such file; function_requirements('deactivate_abuse') will fatal (plugin='Detain\\MyAdminSlack\\Plugin', function='deactivate_abuse', root='/home/sites/mystage/include', source='/../vendor/detain/myadmin-slack-chat/src/abuse.inc.php', resolved='/home/sites/mystage/include/../vendor/detain/myadmin-slack-chat/src/abuse.inc.php')
   - [B-10] requirement "get_abuse_licenses" registers /../vendor/detain/myadmin-slack-chat/src/abuse.inc.php, which resolves to /home/sites/mystage/include/../vendor/detain/myadmin-slack-chat/src/abuse.inc.php — no such file; function_requirements('get_abuse_licenses') will fatal (plugin='Detain\\MyAdminSlack\\Plugin', function='get_abuse_licenses', root='/home/sites/mystage/include', source='/../vendor/detain/myadmin-slack-chat/src/abuse.inc.php', resolved='/home/sites/mystage/include/../vendor/detain/myadmin-slack-chat/src/abuse.inc.php')
-
-### B-12 — 1 package(s)
-
-- **detain/myadmin-powerdns**
-  - [B-12] Detain\MyAdminPowerDns\Plugin::getSettings() ran but registered no settings at all (class='Detain\\MyAdminPowerDns\\Plugin', method='getSettings', settings=0)
 
 ## Grid
 
@@ -193,7 +185,7 @@ against the assertion as written.
 | piwik-analytics | . | . | . | . | . | . | . | . | . | . | . | **F** | o | o | . | o | . |
 | plesk-webhosting | . | . | . | . | . | . | . | . | . | . | . | . | o | . | . | o | . |
 | pleskautomation-webhosting | . | . | . | . | . | . | . | . | . | . | . | . | o | . | . | o | . |
-| powerdns | . | . | . | . | . | . | . | . | . | . | . | **F** | . | **F** | . | o | . |
+| powerdns | . | . | . | . | . | . | . | . | . | . | . | . | . | o | . | o | . |
 | quickservers-module | . | . | . | . | . | . | . | . | . | . | . | o | o | . | o | o | . |
 | raid-backups | . | . | . | . | . | . | . | . | . | . | . | **F** | o | o | . | o | . |
 | sendy-mailinglist | . | . | . | . | . | . | . | . | . | . | . | o | o | . | o | o | . |
