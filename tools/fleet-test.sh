@@ -30,6 +30,9 @@
 #   tools/fleet-test.sh                        every repo in tools/fleet-repos.json
 #   tools/fleet-test.sh --limit=5              first N (smoke test)
 #   tools/fleet-test.sh --only=kvm-vps,ssl-module
+#
+# A manifest "repo" may be an absolute path instead of owner/name, which is how a planted
+# break is proven against a local checkout rather than by pushing a broken branch.
 #   tools/fleet-test.sh --jobs=4               N repos at a time
 #   tools/fleet-test.sh --work=/path/to/dir    keep the checkouts
 #   tools/fleet-test.sh --verify-isolation     prove a planted break is detected, then stop
@@ -149,8 +152,16 @@ run_one() {
   out="$WORK/results/$name.json"
   status="unknown"
 
+  # A manifest entry is normally owner/name and clones from GitHub. An absolute path is
+  # accepted too, so a planted break can be proven against a local checkout without pushing
+  # a deliberately broken branch to a real repository -- which is how gate G8 is reproduced.
+  local url
+  case "$slug" in
+    /*|*://*) url="$slug" ;;
+    *)        url="https://github.com/$slug.git" ;;
+  esac
   {
-    git clone --quiet --depth 1 --branch "$branch" "https://github.com/$slug.git" "$dest"
+    git clone --quiet --depth 1 --branch "$branch" "$url" "$dest"
   } >>"$log" 2>&1
 
   if [ ! -d "$dest" ]; then
