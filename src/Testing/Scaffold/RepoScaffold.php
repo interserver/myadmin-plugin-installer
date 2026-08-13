@@ -108,7 +108,77 @@ class RepoScaffold
             $this->planContractTest($facts),
             $this->planPhpunitConfig(),
             $this->planWorkflow(),
+            $this->planSkill($facts),
         ];
+    }
+
+    /**
+     * Plans the agent-facing skill that documents the harness for this package.
+     *
+     * A conversion that ships only the test is half a conversion: the package ends up on the
+     * harness while its own `.claude/skills/` still tells the next session to write
+     * reflection-only assertions, which is what the harness replaced. Generating the skill
+     * from the same command that generates the test keeps the two from diverging.
+     *
+     * The notes list any pre-existing skill that still teaches the old pattern. Those are
+     * *reported*, never rewritten here — they hold per-package knowledge written down nowhere
+     * else, and amending them is a separate, deliberate act.
+     *
+     * @param \MyAdmin\Plugins\Testing\Scaffold\PluginFacts $facts
+     * @return array
+     */
+    private function planSkill(PluginFacts $facts)
+    {
+        $doc = new SkillDoc();
+        $path = SkillDoc::SKILL_PATH;
+        $contents = $doc->render($facts);
+        $notes = [];
+
+        foreach ($this->supersededSkills() as $name) {
+            $notes[] = '.claude/skills/'.$name.'/SKILL.md still teaches the reflection-only pattern this'
+                .' harness replaced, and has not been amended. Prepend SkillDoc::supersedeNotice() to it;'
+                .' do not rewrite or delete it.';
+        }
+
+        if (is_file($this->root.'/'.$path)) {
+            $current = (string)file_get_contents($this->root.'/'.$path);
+            $notes[] = $current === $contents
+                ? 'identical to what this generator produces.'
+                : 'differs from what this generator produces — regenerate with --force to adopt the'
+                    .' current guidance.';
+            return $this->entry($path, self::KEEP, $contents, $notes);
+        }
+
+        return $this->entry($path, self::CREATE, $contents, $notes);
+    }
+
+    /**
+     * Skills in this package that predate the harness and have not been amended.
+     *
+     * The test is deliberately blunt — a skill that mentions reflection and does not carry
+     * {@see SkillDoc::NOTICE_MARKER}. A precise classifier would need to understand 58
+     * differently-worded files; a blunt one over-reports at worst, and the fix for a false
+     * positive is to add the notice anyway, which costs nothing.
+     *
+     * @return string[] skill directory names, sorted
+     */
+    public function supersededSkills()
+    {
+        $doc = new SkillDoc();
+        $found = [];
+        foreach ((array)glob($this->root.'/.claude/skills/*/SKILL.md') as $file) {
+            $name = basename(dirname((string)$file));
+            if ($name === 'plugin-contract-tests') {
+                continue;
+            }
+            $body = (string)file_get_contents((string)$file);
+            if (stripos($body, 'reflection') !== false && !$doc->isAmended($body)) {
+                $found[] = $name;
+            }
+        }
+        sort($found);
+
+        return $found;
     }
 
     /**

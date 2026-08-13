@@ -4,6 +4,7 @@ namespace Tests\MyAdmin\Plugins\Testing\Scaffold;
 
 use MyAdmin\Plugins\Testing\Scaffold\PluginFacts;
 use MyAdmin\Plugins\Testing\Scaffold\RepoScaffold;
+use MyAdmin\Plugins\Testing\Scaffold\SkillDoc;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -80,14 +81,93 @@ class RepoScaffoldTest extends TestCase
         $this->fail('no plan entry for '.$path);
     }
 
-    public function testAnEmptyPackageGetsAllThreeFiles(): void
+    public function testAnEmptyPackageGetsAllFourFiles(): void
     {
         $plan = $this->scaffold()->plan($this->facts());
 
-        foreach (['tests/ContractTest.php', 'phpunit.xml.dist', '.github/workflows/tests.yml'] as $path) {
+        $expected = [
+            'tests/ContractTest.php',
+            'phpunit.xml.dist',
+            '.github/workflows/tests.yml',
+            '.claude/skills/plugin-contract-tests/SKILL.md',
+        ];
+        foreach ($expected as $path) {
             $this->assertSame(RepoScaffold::CREATE, $this->entryFor($plan, $path)['action'], $path);
             $this->assertNotEmpty($this->entryFor($plan, $path)['contents'], $path);
         }
+    }
+
+    /**
+     * The skill is generated for the same reason the test is: a package that lands on the
+     * harness while its own `.claude/skills/` still argues for reflection-only assertions has
+     * been converted in the code and un-converted in the documentation the next session reads
+     * first.
+     */
+    public function testTheGeneratedSkillNamesThisPackagesOwnPluginClass(): void
+    {
+        $entry = $this->entryFor(
+            $this->scaffold()->plan($this->facts()),
+            '.claude/skills/plugin-contract-tests/SKILL.md'
+        );
+
+        $this->assertStringContainsString('Detain\\MyAdminThing\\Plugin', $entry['contents']);
+        $this->assertStringContainsString('name: plugin-contract-tests', $entry['contents']);
+    }
+
+    /**
+     * Reporting is the whole intervention here. A planner that rewrote these files would be
+     * deleting per-package knowledge — which class must not be constructed, and why — that is
+     * written down nowhere else.
+     */
+    public function testASkillStillTeachingTheOldPatternIsReportedAndNotTouched(): void
+    {
+        $scaffold = $this->scaffold();
+        mkdir($this->root.'/.claude/skills/phpunit-reflection-test', 0755, true);
+        $stale = $this->root.'/.claude/skills/phpunit-reflection-test/SKILL.md';
+        file_put_contents($stale, "---\nname: phpunit-reflection-test\n---\nUse ReflectionClass only.\n");
+
+        $entry = $this->entryFor(
+            $scaffold->plan($this->facts()),
+            '.claude/skills/plugin-contract-tests/SKILL.md'
+        );
+
+        $this->assertSame(['phpunit-reflection-test'], $scaffold->supersededSkills());
+        $this->assertStringContainsString('phpunit-reflection-test', implode(' ', $entry['notes']));
+        $this->assertStringContainsString('do not rewrite or delete it', implode(' ', $entry['notes']));
+        $this->assertSame(
+            "---\nname: phpunit-reflection-test\n---\nUse ReflectionClass only.\n",
+            file_get_contents($stale),
+            'planning must not touch the file it is reporting on'
+        );
+    }
+
+    public function testAnAmendedSkillIsNoLongerReportedAsStale(): void
+    {
+        $scaffold = $this->scaffold();
+        mkdir($this->root.'/.claude/skills/phpunit-reflection-test', 0755, true);
+        file_put_contents(
+            $this->root.'/.claude/skills/phpunit-reflection-test/SKILL.md',
+            "---\nname: phpunit-reflection-test\n---\n".(new SkillDoc())->supersedeNotice()."Use ReflectionClass only.\n"
+        );
+
+        $this->assertSame([], $scaffold->supersededSkills());
+    }
+
+    /**
+     * The generated skill is not itself a finding. Without this exclusion the command would
+     * report the file it just wrote as stale, because it necessarily discusses reflection in
+     * order to tell you not to rely on it.
+     */
+    public function testTheGeneratedSkillIsNotReportedAsStaleAgainstItself(): void
+    {
+        $scaffold = $this->scaffold();
+        mkdir($this->root.'/.claude/skills/plugin-contract-tests', 0755, true);
+        file_put_contents(
+            $this->root.'/.claude/skills/plugin-contract-tests/SKILL.md',
+            (new SkillDoc())->render($this->facts())
+        );
+
+        $this->assertSame([], $scaffold->supersededSkills());
     }
 
     /**
@@ -102,6 +182,8 @@ class RepoScaffoldTest extends TestCase
         file_put_contents($this->root.'/tests/ContractTest.php', '<?php // hand written');
         mkdir($this->root.'/.github/workflows', 0755, true);
         file_put_contents($this->root.'/.github/workflows/tests.yml', 'name: Tests');
+        mkdir($this->root.'/.claude/skills/plugin-contract-tests', 0755, true);
+        file_put_contents($this->root.'/.claude/skills/plugin-contract-tests/SKILL.md', '# hand written');
 
         foreach ($scaffold->plan($this->facts()) as $entry) {
             $this->assertSame(RepoScaffold::KEEP, $entry['action'], $entry['path']);

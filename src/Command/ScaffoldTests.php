@@ -12,6 +12,7 @@ namespace MyAdmin\Plugins\Command;
 use Composer\Command\BaseCommand;
 use MyAdmin\Plugins\Testing\Scaffold\PluginFacts;
 use MyAdmin\Plugins\Testing\Scaffold\RepoScaffold;
+use MyAdmin\Plugins\Testing\Scaffold\SkillDoc;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -21,8 +22,9 @@ use Symfony\Component\Console\Output\OutputInterface;
  * `composer myadmin:scaffold-tests`
  *
  * Gives a plugin package everything it needs to run the shared contract harness: a
- * generated `tests/ContractTest.php` pinned to what the plugin actually registers, plus a
- * PHPUnit config and CI workflow if it has none.
+ * generated `tests/ContractTest.php` pinned to what the plugin actually registers, the
+ * `plugin-contract-tests` skill that tells the next session how to read it, plus a PHPUnit
+ * config and CI workflow if it has none.
  *
  * ---------------------------------------------------------------------------------
  * RUN THIS FROM INSIDE A PLUGIN REPO, NOT FROM MyAdmin CORE
@@ -40,9 +42,9 @@ use Symfony\Component\Console\Output\OutputInterface;
  * unless `--write` is given. `--dry-run` is accepted explicitly for symmetry with the other
  * myadmin:* commands, but it is what happens anyway.
  *
- * Even with `--write`, an existing file is never overwritten. `tests/ContractTest.php` is
- * the sole exception and only under `--force`, because that file is wholly generated and
- * regeneration is how a package adopts a fix to the generator.
+ * Even with `--write`, an existing file is never overwritten. The two wholly-generated files
+ * — `tests/ContractTest.php` and the `plugin-contract-tests` skill — are the exception and
+ * only under `--force`, because regeneration is how a package adopts a fix to the generator.
  */
 class ScaffoldTests extends BaseCommand
 {
@@ -59,10 +61,11 @@ class ScaffoldTests extends BaseCommand
             ->setHelp(
                 'Measures the plugin by executing it under the harness -- its $type, its $module and the'
                 .' hook keys it really registers -- then generates tests/ContractTest.php pinned to those'
-                .' facts, plus phpunit.xml.dist and a CI workflow if the package has none.'
+                .' facts, plus phpunit.xml.dist, a CI workflow, and the plugin-contract-tests skill if the'
+                .' package has none.'
                 .PHP_EOL.PHP_EOL
                 .'Prints the plan and changes nothing unless --write is given. Existing files are never'
-                .' overwritten; tests/ContractTest.php can be regenerated with --force.'
+                .' overwritten; the wholly-generated files can be re-emitted with --force.'
                 .PHP_EOL.PHP_EOL
                 .'Run it from inside a plugin repository. MyAdmin core sets config.allow-plugins to false,'
                 .' so the myadmin:* commands are not registered there at all.'
@@ -70,7 +73,7 @@ class ScaffoldTests extends BaseCommand
             ->addArgument('path', InputArgument::OPTIONAL, 'Path to the plugin package (default: the current directory)')
             ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Print the plan without writing (the default)')
             ->addOption('write', null, InputOption::VALUE_NONE, 'Actually write the files the plan marks CREATE')
-            ->addOption('force', null, InputOption::VALUE_NONE, 'Also regenerate tests/ContractTest.php when it already exists');
+            ->addOption('force', null, InputOption::VALUE_NONE, 'Also regenerate the wholly-generated files (tests/ContractTest.php, the skill) when they already exist');
     }
 
     /**
@@ -141,9 +144,12 @@ class ScaffoldTests extends BaseCommand
      */
     private function report(array $entry, $root, $write, $force, $io)
     {
+        // Both wholly-generated files may be re-emitted under --force. Everything else is a
+        // package's own, and stays a package's own.
+        $generated = ['tests/ContractTest.php', SkillDoc::SKILL_PATH];
         $regenerating = $force
             && $entry['action'] === RepoScaffold::KEEP
-            && $entry['path'] === 'tests/ContractTest.php'
+            && in_array($entry['path'], $generated, true)
             && $entry['contents'] !== null;
 
         $action = $regenerating ? 'REGENERATE' : strtoupper($entry['action']);

@@ -70,6 +70,30 @@ What it does:
 | `tests/ContractTest.php` | created if absent; regenerated only under `--force` |
 | `phpunit.xml.dist` | created if absent; otherwise audited for the settings the harness depends on |
 | `.github/workflows/tests.yml` | created if absent, with the PHP matrix and extension list derived from the package's own `composer.json` |
+| `.claude/skills/plugin-contract-tests/SKILL.md` | created if absent; regenerated only under `--force` |
+
+### Why the skill is part of the scaffold
+
+Every package in this fleet carries `.claude/skills/`, and 58 of them ship a
+skill whose entire subject is how to write a test for that package. Those were
+written before this harness existed and they teach what was true then: never
+instantiate the plugin, never call `getSettings()`/`getActivate()`, check the
+signature with `ReflectionMethod` and stop. That is now precisely backwards —
+the harness defines the constants those calls used to fatal on and then runs the
+handlers for real.
+
+Shipping only `tests/ContractTest.php` is therefore half a conversion: the
+package lands on the harness while its own documentation still argues against
+it, and documentation is what a model reads *first*. A mistake there does not
+produce a red build — it produces a confident session that undoes the harness
+and leaves a green build behind.
+
+The command **reports** any pre-existing skill that still teaches the old
+pattern; it never rewrites one. Those files carry per-package knowledge — which
+class must not be constructed because its constructor opens an IMAP connection —
+written down nowhere else. `SkillDoc::supersedeNotice()` is the amendment to
+prepend to such a file: it narrows what the file still governs and leaves every
+word underneath it intact.
 
 **Nothing existing is ever overwritten.** Across the 66 converted packages
 there are 55 distinct `phpunit.xml.dist` files and 63 distinct workflows, and
