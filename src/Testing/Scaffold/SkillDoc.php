@@ -121,16 +121,69 @@ MD;
     }
 
     /**
+     * The section a converted package's `CLAUDE.md` gets.
+     *
+     * A skill is read on demand; `CLAUDE.md` is read every session, unprompted. Of the 67
+     * plugin packages carrying one, 32 describe the reflection-only pattern as *the* way to
+     * test the plugin and none mention the harness at all — so the file that is always in
+     * context contradicts the file that has to be asked for. This is the shorter, always-on
+     * half of the same correction.
+     *
+     * Kept deliberately brief and pointed at the skill, because unlike the skill this text
+     * costs context on every single turn.
+     *
+     * @return string
+     */
+    public function claudeMdSection()
+    {
+        $section = <<<'MD'
+## Plugin contract harness
+
+This package is on the shared contract harness from `detain/myadmin-plugin-installer`.
+`tests/ContractTest.php` is **generated** — run `composer myadmin:scaffold-tests` (add
+`--force --write` to re-emit it), never hand-edit it.
+
+The harness **executes** the plugin: it defines the bare constants the class body references
+and then calls `getHooks()`, `getSettings()`, `getMenu()`, `apiRegister()` and — for
+`type=service` packages — the activate/deactivate/change-ip/queue handlers, for real.
+
+**So do not write reflection-only tests for the plugin class.** Asserting a handler exists,
+is public, is static and takes one parameter passes whether or not the handler works; three
+production bugs in this fleet were sitting behind assertions of exactly that shape. Older
+guidance in this repo that says those methods must not be called predates the harness.
+
+The harness is **additive**: it runs alongside this package's existing tests, and nothing is
+deleted to make room for it. Run the whole suite, never `--filter ContractTest` alone — the
+contract class primes constants and calls `register_module()`, neither of which can be undone.
+
+See the `plugin-contract-tests` skill for the full workflow, and `docs/testing-harness.md` in
+the installer.
+MD;
+
+        return str_replace("\r\n", "\n", $section)."\n";
+    }
+
+    /**
      * Clause appended to a superseded skill's `description:` line.
      *
      * The description is the only part of a skill a model reads when it is *choosing* one,
      * so an amendment that lives only in the body arrives too late to affect the choice.
      *
+     * ---------------------------------------------------------------------------------
+     * NO COLON-SPACE, EVER
+     * ---------------------------------------------------------------------------------
+     * These descriptions are unquoted YAML scalars. A `: ` anywhere in one makes the whole
+     * frontmatter block unparseable, which does not fail loudly — it makes the skill
+     * undiscoverable, which is indistinguishable from the skill not existing. A first draft
+     * of this suffix opened with `NOTE: ` and silently broke the frontmatter of 83 skills
+     * that had parsed fine before. `myadmin:scaffold-tests` is safe because the colon is not
+     * followed by a space.
+     *
      * @return string
      */
     public function descriptionSuffix()
     {
-        return ' NOTE: for a plugin\'s contract/behavioral tests (tests/ContractTest.php, the shared'
+        return ' For a plugin\'s contract or behavioral tests (tests/ContractTest.php, the shared'
             .' harness, composer myadmin:scaffold-tests) use the plugin-contract-tests skill instead —'
             .' this skill\'s reflection-only guidance predates that harness.';
     }

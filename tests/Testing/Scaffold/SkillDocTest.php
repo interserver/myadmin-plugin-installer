@@ -207,6 +207,36 @@ class SkillDocTest extends TestCase
     }
 
     /**
+     * `CLAUDE.md` is the always-on half of the correction, and it is the half that has to earn
+     * its place: it costs context on every turn, so it says the three things whose absence
+     * lets a session undo the harness, and stops.
+     */
+    public function testTheClaudeMdSectionCarriesTheCorrectionAndPointsAtTheSkill(): void
+    {
+        $section = (new SkillDoc())->claudeMdSection();
+
+        $this->assertStringStartsWith('## Plugin contract harness', $section);
+        $this->assertStringContainsString('do not write reflection-only tests', $section);
+        $this->assertStringContainsString('generated', $section);
+        $this->assertStringContainsString('additive', $section);
+        $this->assertStringContainsString('plugin-contract-tests', $section);
+        $this->assertStringNotContainsString("\r", $section);
+    }
+
+    /**
+     * It goes into 70 files that are already long. A section that grew to skill-length would
+     * be paid for on every turn in every session.
+     */
+    public function testTheClaudeMdSectionStaysShort(): void
+    {
+        $this->assertLessThan(
+            1600,
+            strlen((new SkillDoc())->claudeMdSection()),
+            'CLAUDE.md is loaded unprompted every session; this is not the place for the full workflow'
+        );
+    }
+
+    /**
      * A model choosing between skills reads descriptions, not bodies. An amendment that lives
      * only in the body arrives after the choice has already been made.
      */
@@ -217,5 +247,44 @@ class SkillDocTest extends TestCase
         $this->assertStringContainsString('plugin-contract-tests skill instead', $suffix);
         $this->assertStringStartsWith(' ', $suffix, 'it is appended to an existing sentence');
         $this->assertStringNotContainsString("\n", $suffix, 'frontmatter descriptions are a single line');
+    }
+
+    /**
+     * The one that was learned the expensive way.
+     *
+     * A skill `description:` is an unquoted YAML scalar, so a single `: ` inside it makes the
+     * whole frontmatter block unparseable — and an unparseable skill is not a broken skill,
+     * it is an *invisible* one. Nothing goes red. A first draft of this suffix opened with
+     * `NOTE: ` and took the frontmatter of 83 previously-valid skills with it.
+     */
+    public function testTheDescriptionSuffixCannotBreakUnquotedYaml(): void
+    {
+        $suffix = (new SkillDoc())->descriptionSuffix();
+
+        $this->assertStringNotContainsString(': ', $suffix, 'a colon-space ends the YAML scalar');
+        $this->assertStringNotContainsString(':'."\t", $suffix);
+        $this->assertStringNotContainsString('#', $suffix, 'a hash starts a YAML comment');
+    }
+
+    /**
+     * The generated skill's own description is subject to exactly the same rule, and it is
+     * assembled from measured values, so it has to hold for a real one rather than in
+     * principle.
+     */
+    public function testTheGeneratedDescriptionIsParseableYaml(): void
+    {
+        $doc = (new SkillDoc())->render($this->facts());
+        $close = strpos($doc, "\n---\n");
+        $front = substr($doc, 4, $close - 3);
+
+        foreach (explode("\n", trim($front)) as $line) {
+            if ($line === '') {
+                continue;
+            }
+            $key = substr($line, 0, (int)strpos($line, ':'));
+            $value = substr($line, strlen($key) + 2);
+            $this->assertNotFalse(strpos($line, ': '), 'every frontmatter line is a mapping: '.$line);
+            $this->assertStringNotContainsString(': ', $value, 'unquoted scalar broken by a colon-space: '.$line);
+        }
     }
 }
