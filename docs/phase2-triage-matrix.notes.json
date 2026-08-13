@@ -1,0 +1,12 @@
+{
+    "A-7": "cloudlinux dead hooks",
+    "A-9": "0 yield — regression guard",
+    "B-9": "0 yield — regression guard",
+    "B-9b": "cloudlinux dead hooks",
+    "B-10": "dangling requirement paths · n/a: registers no requirement paths at all",
+    "B-11": "n/a: registers no routes, or no function.requirements handler",
+    "B-12": "n/a: orphaned getSettings — core can never invoke it",
+    "B-13": "n/a: no getMenu()",
+    "B-14": "n/a: no getQueue(), or not a service · the 5 skips are dynamic dispatch B-14 cannot read",
+    "B-16": "n/a: no apiRegister() — 9 of 71 publish an API surface · the 1 failure registers the hook and then registers nothing"
+}
