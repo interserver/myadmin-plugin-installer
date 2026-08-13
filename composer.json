@@ -38,6 +38,9 @@
 	"extra": {
 		"plugin-modifies-install-path": false,
 		"plugin-modifies-downloads": false,
-		"class": "MyAdmin\\Plugins\\Plugin"
+		"class": "MyAdmin\\Plugins\\Plugin",
+		"branch-alias": {
+			"dev-master": "2.1.x-dev"
+		}
 	}
 }
