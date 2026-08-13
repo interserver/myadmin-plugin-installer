@@ -356,7 +356,7 @@ class TierB14QueueActionScanner
             return null;
         }
         // A `__DIR__`-less chain whose first literal is rooted is an absolute path.
-        if ($anchor === 'relative' && $parts[0]['kind'] === 'lit' && strpos($parts[0]['value'], '/') === 0) {
+        if ($anchor === 'relative' && $parts[0]['kind'] === 'lit' && Path::isAbsolute($parts[0]['value'])) {
             $anchor = 'absolute';
         }
         $prefix = '';

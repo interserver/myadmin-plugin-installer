@@ -9,6 +9,7 @@
 namespace Tests\MyAdmin\Plugins\Testing\Contract;
 
 use MyAdmin\Plugins\Testing\Contract\Finding;
+use MyAdmin\Plugins\Testing\Contract\Path;
 use MyAdmin\Plugins\Testing\Contract\PluginSubject;
 use MyAdmin\Plugins\Testing\Contract\TierB10RequirementPathsResolve;
 use PHPUnit\Framework\TestCase;
@@ -94,7 +95,14 @@ class TierB10RequirementPathsResolveTest extends TestCase
         $base = sys_get_temp_dir().'/tierb10-'.getmypid().'-'.mt_rand();
         mkdir($base, 0777, true);
         $this->scratchDirs[] = $base;
-        return $base;
+
+        // Canonicalise. The inspector derives its answers from the reflected file name,
+        // which the runtime reports in canonical form -- and on Windows sys_get_temp_dir()
+        // returns the 8.3 short form (C:\Users\RUNNER~1\...) while reflection returns the
+        // long one, so an expectation built from the raw value can never match a correct
+        // result.
+        $real = realpath($base);
+        return $real === false ? $base : $real;
     }
 
     /**
@@ -126,7 +134,7 @@ class TierB10RequirementPathsResolveTest extends TestCase
      */
     private function isAbsolute($path)
     {
-        return is_string($path) && $path !== '' && $path[0] === '/';
+        return is_string($path) && Path::isAbsolute($path);
     }
 
     /**

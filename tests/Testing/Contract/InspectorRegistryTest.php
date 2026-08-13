@@ -357,7 +357,14 @@ class InspectorRegistryTest extends TestCase
         $second = $this->fqcn('IregProbeSecond');
 
         // Ran nowhere near the package, and still found the copied registry's neighbours.
-        $this->assertSame('/', $report['cwd']);
+        // The probe is launched from the filesystem root, which is `/` on POSIX and `D:\`
+        // on Windows; a root is the only path that is its own parent, so that is the
+        // OS-neutral way to say "nowhere near".
+        $this->assertSame(
+            $report['cwd'],
+            dirname($report['cwd']),
+            'the probe must run from the filesystem root, or it proves nothing about the cwd'
+        );
 
         // Discovery is real: a class that did not exist when this file was written is found,
         // and the abstract implementor, the plain class and the interface beside it are not.

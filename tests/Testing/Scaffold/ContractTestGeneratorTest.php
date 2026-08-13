@@ -219,4 +219,14 @@ class ContractTestGeneratorTest extends TestCase
         $this->assertStringContainsString('even reading ::$type fatals on an unprimed', $code);
         $this->assertStringNotContainsString('even reading ::service', $code);
     }
+
+    /**
+     * The generated file is committed into a repository whose every other file is LF. On a
+     * Windows checkout with core.autocrlf the heredocs in the generator inherit CRLF, and
+     * the result would be a whole-file diff the first time anyone regenerated it on Linux.
+     */
+    public function testTheOutputIsLineFeedTerminatedWhateverTheHostDoes(): void
+    {
+        $this->assertStringNotContainsString("\r", $this->render());
+    }
 }

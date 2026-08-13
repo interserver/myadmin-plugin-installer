@@ -418,7 +418,7 @@ class TierB14TemplateCompleteness implements PluginInspector
      */
     private function resolveDirectory(PluginSubject $subject, ReflectionMethod $method, array $dispatch)
     {
-        $fragment = rtrim($dispatch['directory'], '/');
+        $fragment = rtrim($dispatch['directory'], '/\\');
         if ($dispatch['anchor'] === 'absolute') {
             return $this->normalise($fragment);
         }
@@ -434,7 +434,7 @@ class TierB14TemplateCompleteness implements PluginInspector
                 return null;
             }
         }
-        return $this->normalise($base.'/'.ltrim($fragment, '/'));
+        return Path::under($base, $fragment);
     }
 
     /**
@@ -444,29 +444,17 @@ class TierB14TemplateCompleteness implements PluginInspector
      * exist, and naming a missing template directory in the finding is the whole point of
      * the failure branch above.
      *
+     * This used to define "absolute" as "starts with `/`", which is false for every path
+     * `dirname(__FILE__)` produces on Windows. The drive letter was then dropped and every
+     * plugin's template directory resolved to the bare fragment, so B-14 accused all of
+     * them of shipping no templates. {@see Path} owns that logic now.
+     *
      * @param string $path
      * @return string
      */
     private function normalise($path)
     {
-        $absolute = strpos($path, '/') === 0;
-        $segments = [];
-        foreach (explode('/', $path) as $segment) {
-            if ($segment === '' || $segment === '.') {
-                continue;
-            }
-            if ($segment === '..') {
-                if ($segments !== [] && end($segments) !== '..') {
-                    array_pop($segments);
-                    continue;
-                }
-                if ($absolute) {
-                    continue;
-                }
-            }
-            $segments[] = $segment;
-        }
-        return ($absolute ? '/' : '').implode('/', $segments);
+        return Path::normalise($path);
     }
 
     /**

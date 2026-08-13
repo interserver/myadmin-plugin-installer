@@ -56,11 +56,17 @@ class ContractTestGenerator
         $namespace = $facts->testNamespace();
         $base = $facts->isServicePlugin() ? 'ServicePluginTestCase' : 'PluginContractTestCase';
 
-        return $this->header($facts, $namespace, $base)
+        $file = $this->header($facts, $namespace, $base)
             .$this->classOpening($base)
             .$this->pluginClassMethod($short)
             .$this->identityPin($facts, $short)
             ."    }\n}\n";
+
+        // LF, whatever the host does. The heredocs above inherit this file's own line
+        // endings, and a Windows checkout with core.autocrlf makes them CRLF — which would
+        // then be committed into a repository whose every other file is LF, producing a
+        // whole-file diff the first time anyone regenerated it on Linux.
+        return str_replace("\r\n", "\n", $file);
     }
 
     /**
