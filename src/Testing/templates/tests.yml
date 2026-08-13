@@ -1,0 +1,36 @@
+# Canonical CI workflow for a MyAdmin plugin package.
+#
+# The PHP matrix and the extension list are derived from this package's own composer.json —
+# its `php` constraint and its `ext-*` requirements — rather than hardcoded, because a leg
+# the package cannot actually run on is a red build that teaches nobody anything.
+name: Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-version: [{{php_versions}}]
+    name: PHP ${{ matrix.php-version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          extensions: {{extensions}}
+          coverage: xdebug
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Run tests
+        run: vendor/bin/phpunit --colors=always

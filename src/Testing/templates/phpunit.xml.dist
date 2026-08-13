@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Canonical PHPUnit configuration for a MyAdmin plugin package.
+
+    failOnRisky and failOnWarning are the two settings the harness depends on rather than
+    merely prefers. A contract inspector reports a defect by failing, but several of the
+    conditions it detects surface first as a PHP warning — a require() of a path that does
+    not resolve, output emitted during a test — and without these, PHPUnit would print
+    those and still exit 0.
+
+    beStrictAboutOutputDuringTests is what makes assertion B-15 (a plugin must not echo
+    while its handlers run) enforceable at all.
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="{{bootstrap}}"
+         colors="true"
+         verbose="true"
+         failOnRisky="true"
+         failOnWarning="true"
+         beStrictAboutOutputDuringTests="true"
+         beStrictAboutTodoAnnotatedTests="true">
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests</directory>
+        </testsuite>
+    </testsuites>
+    <coverage processUncoveredFiles="true">
+        <include>
+            <directory suffix=".php">src</directory>
+        </include>
+    </coverage>
+</phpunit>

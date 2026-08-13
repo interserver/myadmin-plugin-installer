@@ -3,10 +3,16 @@
 `MyAdmin\Plugins\Testing\` — the shared harness that lets a plugin's handlers
 actually **execute** under test, instead of being described by reflection.
 
-Phase 1 of `plugin_plan.md`. Built on branch `feature/testing-harness`;
-**nothing here has been merged to the installer's `master`** (D6 — 69 repos
-track `dev-master`, so a bad push breaks their CI instantly and can break a
-production `composer update`).
+**Status: released and rolled out.** Merged to `master` and tagged `v2.1.0`,
+then `v2.1.1` and `v2.1.2` for the two harness bugs recorded in §11. The fleet
+requires `^2.1`; 66 packages carry a generated `tests/ContractTest.php`.
+
+The section ordering is historical — §§1–10 were written during Phase 1, when
+the question was whether the harness could work at all, and the measurements
+in them are worth keeping. If you are here to make a package use the harness,
+you want **§1.5 (scaffolding)** and **§11 (the generated file)**; if you are
+here because a build went red, you want **§3 (traps)** and **§7 (H-bug vs
+P-bug)**.
 
 ---
 
@@ -40,6 +46,62 @@ Options:
 `init()` is idempotent — safe from `tests/bootstrap.php` *and* every `setUp()`.
 It returns the `Harness` class name; reach the fakes through
 `Harness::settings()`, `Harness::db()`, `Harness::history()`, and so on.
+
+---
+
+## 1.5 Scaffolding a package
+
+```bash
+cd /path/to/myadmin-something
+composer require detain/myadmin-plugin-installer:^2.1
+composer myadmin:scaffold-tests            # prints the plan, writes nothing
+composer myadmin:scaffold-tests --write    # applies it
+```
+
+**Run it from inside the plugin repo, never from MyAdmin core.** Core sets
+`config.allow-plugins: false`, so Composer never activates this package there
+and none of the `myadmin:*` commands exist at all. From core the command is
+not broken; it is absent.
+
+What it does:
+
+| file | when |
+|---|---|
+| `tests/ContractTest.php` | created if absent; regenerated only under `--force` |
+| `phpunit.xml.dist` | created if absent; otherwise audited for the settings the harness depends on |
+| `.github/workflows/tests.yml` | created if absent, with the PHP matrix and extension list derived from the package's own `composer.json` |
+
+**Nothing existing is ever overwritten.** Across the 66 converted packages
+there are 55 distinct `phpunit.xml.dist` files and 63 distinct workflows, and
+most of that variation is a package knowing something about itself that is
+written down nowhere else — an `ext-imap` requirement, an older PHP floor.
+Flattening it would be a silent deletion. An existing config is instead
+*audited*, and reported as `DRIFT` when it lacks one of:
+
+| setting | why the harness depends on it |
+|---|---|
+| `failOnWarning="true"` | several contract findings surface first as a PHP warning — a `require()` whose path does not resolve, most often. Without this, PHPUnit prints the finding and still exits 0 |
+| `failOnRisky="true"` | a test asserting nothing because its subject could not load is risky, not passing |
+| `beStrictAboutOutputDuringTests="true"` | assertion B-15 (a plugin must not echo while its handlers run) is unenforceable without it |
+
+### The facts are measured, not parsed
+
+The generated pin records what the plugin *actually registers*, obtained by
+executing it: `src/Testing/Scaffold/probe.php` boots the harness, primes the
+plugin's bare constants, and calls `getHooks()`. This matters because in this
+fleet the hook table is not a literal anywhere in the source — it is assembled
+from `self::$module` and from constants the host defines at runtime, so a
+tokenizer would report the expression and only execution reports the key.
+
+The probe runs in a process of its own, always. Priming defines real constants
+and calls `register_module()`; PHP cannot undefine a constant and
+`register_module()` has no inverse, so a probe sharing the caller's process
+would contaminate it permanently — and it needs the *package's* autoloader,
+not the installer's.
+
+Its stdout is a data channel carrying exactly one line of JSON. Deprecations
+from a package still on an old vendored installer are routed to stderr,
+because one landing on stdout corrupts the payload.
 
 ---
 
@@ -302,7 +364,7 @@ Worked examples from Phase 1:
 
 ---
 
-## 8. Namespace-scoped function stubs — **OPEN DECISION**
+## 8. Namespace-scoped function stubs — **RECOMMENDATION NOW EVIDENCED**
 
 `Bootstrap::stubNamespace()` exists and works, but **which mechanism becomes
 the fleet standard is an owner call.** It is an amendment to D2/§629.
@@ -370,6 +432,39 @@ All three mechanisms were verified to work on PHP 8.3: `eval()` with a
 namespace declaration, `eval()` with a braced namespace, and a temp-file
 `require`.
 
+### What Phase 6 then measured — the cost, in the field
+
+Phase 1 argued (c) on footprint. Phase 6 found the real cost, and it is worse
+than a spare file.
+
+Those 8 repos declare **no-op** helpers in their namespace — including
+`myadmin_log()`, which is one of the harness's observers. PHP binds the
+plugin's unqualified call to the namespaced no-op, so the call never reaches
+the recorder, and assertion A concluded the handler had done nothing and
+reported it as dead code whose service "silently never gets provisioned".
+
+The same plugin passed standalone and failed under its own bootstrap. Same
+plugin, same harness, opposite verdicts, decided entirely by whose
+`myadmin_log()` won name resolution. It blocked 5 packages; **none of them had
+the defect alleged.**
+
+`ServiceHandlerProbe::shadowedObservers()` now detects the shadow and reports
+a skip naming the shadowing function instead of an accusation (v2.1.1, §11).
+That makes the harness safe in the presence of these stubs — it does not make
+the stubs a good idea.
+
+**So the recommendation stands and is now evidenced: default to no namespace
+stubs.** A namespaced stub that shadows a harness observer converts a real
+assertion into a vacuous one, and the harness can only downgrade the verdict
+to "could not tell", never recover the assertion. Where a plugin-specific
+helper genuinely needs stubbing, forward it to the harness rather than
+no-op'ing it, so the observation still lands.
+
+**Still open for the owner:** assertion B — the inert direction — can pass
+vacuously in these same 8 packages for the same reason, and unlike assertion A
+its pass is not obviously wrong. Recorded as D-7 in
+`docs/plugin-harness-findings.md` in MyAdmin core.
+
 ---
 
 ## 9. Phase 1 results
@@ -428,3 +523,67 @@ could not load           3   (payum-payments, vps-module, whmsonic-licensing —
   (3, 339), `tests/support/doubles.php` (4, 1,409), `tests/stubs/framework.php`
   (3, 441). `FakeSettings`/`FakeDb`/`FakeMenu` were promoted from the richest of
   these rather than written from scratch.
+
+---
+
+## 11. The generated `ContractTest`, and what it encodes against
+
+`ContractTestGenerator` is the single source of truth for the per-package test
+file. Everything it emits, it emits for a reason that was paid for once
+already.
+
+### The three structural rules
+
+Three throwaway generators wrote the 66 files now in the fleet, and the
+differences between them were not cosmetic. `ContractTestGeneratorTest` pins
+each as a property rather than a golden string, because a golden file pins
+prose and misses reorderings.
+
+1. **Prime before the plugin class is mentioned.** A static property
+   initializer can itself reference a bare constant — `$settings` holding
+   `REPEAT_BILLING_METHOD => PRORATE_BILLING`, which is mail-module's shape —
+   and initializers run when the class *loads*. So even reading `::$type`
+   fatals on an unprimed class, before the assertion that was supposed to
+   catch anything. `primeConstants()` comes first.
+2. **Read the hook table through `TierA5HooksAreIdempotent::hookTable()`.** A
+   direct `getHooks()` call is a second, independent answer to a question A-5
+   already owns, and for a plugin whose body touches a bare constant the two
+   answers disagree: the inspector handles it, the direct caller throws.
+3. **Evaluate it exactly once.** Calling `getHooks()` twice — once for the key
+   list, once for the callable loop — asserts idempotence by accident and
+   doubles whatever side effect the body has.
+
+### Why the class is isolated
+
+`@runTestsInSeparateProcesses` + `@preserveGlobalState disabled`, always.
+Inspecting a plugin defines constants and calls `register_module()`, neither
+reversible, so without isolation the new file changes the outcome of the tests
+the package already had — which is exactly what an additive conversion must
+not do. This was not theoretical: 3 of the first 25 packages went red on
+their own pre-existing tests, and `executionOrder="depends,defects"` makes the
+ordering unstable, so it can appear and disappear between runs.
+
+### Escape hatches, and when they are legitimate
+
+| hatch | legitimate when | not legitimate when |
+|---|---|---|
+| `--force` regeneration | the package is on an older generation of the template | the pin was hand-edited deliberately — read the diff first |
+| `extra.myadmin-deferred-contract-defects` | a finding is real, agreed, and scheduled — it stays in the record as data | you want the build green and have not decided anything |
+| `@runInSeparateProcess` on one test | that test needs a different constant value (D4 — constants are immutable) | as a substitute for understanding why state leaked |
+| hand-editing `ContractTest.php` | never, in practice — change the generator | to make one package's failure go away |
+
+### Harness bugs fixed since release
+
+Both were the harness making a **false accusation against a plugin**, which is
+the failure mode that costs the most trust and is hardest to notice, because
+the output looks like a finding.
+
+| ref | bug | fix |
+|---|---|---|
+| H-1 | assertion A called a handler dead code when its observer was shadowed by a namespaced no-op (§8) | `ServiceHandlerProbe::shadowedObservers()` — skip, naming the shadowing function — **v2.1.1** |
+| H-2 | a failed `require` was reported as the handler's own logic failing. `isUnresolvableDependency()` gated on `$error instanceof \Error`, but a missing *file* raises a warning | `UNRESOLVABLE_FILE`, checked before the `\Error` gate — **v2.1.2** |
+
+Both are pinned by tests, including the counter-test that an unshadowed plugin
+which genuinely does nothing still fails. When adding an inspector, write that
+counter-test: an inspector that cannot fail is worse than no inspector,
+because it reads as coverage.

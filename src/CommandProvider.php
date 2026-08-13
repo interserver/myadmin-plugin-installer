@@ -13,6 +13,7 @@ use Composer\Plugin\Capability\CommandProvider as CommandProviderCapability;
 use MyAdmin\Plugins\Command\Command;
 use MyAdmin\Plugins\Command\UpdatePlugins;
 use MyAdmin\Plugins\Command\SetPermissions;
+use MyAdmin\Plugins\Command\ScaffoldTests;
 
 /**
  * Supplies this package's `composer myadmin:*` commands.
@@ -113,7 +114,8 @@ class CommandProvider implements CommandProviderCapability
         return [
             new Command(),
             new UpdatePlugins(),
-            new SetPermissions()
+            new SetPermissions(),
+            new ScaffoldTests()
         ];
     }
 }

@@ -3,6 +3,7 @@
 namespace Tests\MyAdmin\Plugins\Command;
 
 use MyAdmin\Plugins\Command\Command;
+use MyAdmin\Plugins\Command\ScaffoldTests;
 use MyAdmin\Plugins\Command\SetPermissions;
 use MyAdmin\Plugins\Command\UpdatePlugins;
 use PHPUnit\Framework\TestCase;
@@ -31,6 +32,7 @@ use ReflectionMethod;
  * happens to be installed.
  *
  * @covers \MyAdmin\Plugins\Command\Command
+ * @covers \MyAdmin\Plugins\Command\ScaffoldTests
  * @covers \MyAdmin\Plugins\Command\SetPermissions
  * @covers \MyAdmin\Plugins\Command\UpdatePlugins
  */
@@ -45,6 +47,7 @@ class ConsoleSignatureTest extends TestCase
             'myadmin' => [Command::class],
             'myadmin:set-permissions' => [SetPermissions::class],
             'myadmin:update-plugins' => [UpdatePlugins::class],
+            'myadmin:scaffold-tests' => [ScaffoldTests::class],
         ];
     }
 
