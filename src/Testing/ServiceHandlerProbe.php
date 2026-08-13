@@ -153,6 +153,25 @@ class ServiceHandlerProbe
     ];
 
     /**
+     * The global functions an effect is observed *through*, and which a plugin's own test
+     * scaffolding can therefore hide.
+     *
+     * PHP resolves an unqualified call inside a namespace to a function in that namespace
+     * before falling back to the global one. A repo that declares
+     * `Detain\Foo\myadmin_log()` in its `tests/stubs.php` — 8 of the fleet do, and
+     * {@see Bootstrap::stubNamespace()} exists to do the same thing deliberately — therefore
+     * takes the plugin's `myadmin_log(...)` call away from {@see Log} without changing a
+     * line of the plugin. The handler still acts; the harness simply cannot see it.
+     *
+     * This list is only the functions whose *sole* purpose here is to be observed. A
+     * shadowed `get_service()` or `has_acl()` changes what the handler decides, which is a
+     * different problem and not one this constant is about.
+     *
+     * @var array<int,string>
+     */
+    const OBSERVER_FUNCTIONS = ['myadmin_log', 'make_insert_query', 'dialog', 'add_output'];
+
+    /**
      * Throwable messages that mean "this environment cannot supply a symbol the handler
      * needs", as opposed to "the handler is broken".
      *
@@ -721,6 +740,54 @@ class ServiceHandlerProbe
             }
         }
         return (bool)preg_match(self::UNRESOLVABLE_CLASS, $message);
+    }
+
+    /**
+     * The observer functions this plugin's own namespace has taken over, fully qualified.
+     *
+     * ---------------------------------------------------------------------------------
+     * WHY A "DID NOTHING" VERDICT CANNOT BE TRUSTED WITHOUT THIS
+     * ---------------------------------------------------------------------------------
+     * Assertion A ends by saying a handler "ran to completion and changed nothing", and
+     * concludes from that that the handler is dead code and its service never gets
+     * provisioned. That is a strong accusation and it is only sound if the harness could
+     * have seen an effect had there been one.
+     *
+     * When the plugin's namespace declares its own `myadmin_log()`, it could not. Measured
+     * on `myadmin-whmsonic-licensing`: driven outside PHPUnit the same handler on the same
+     * seeded event reports `myadmin_log (1)`, `service subject (1)` and passes; driven under
+     * the repo's own `tests/bootstrap.php`, which loads a `tests/stubs.php` declaring
+     * `Detain\MyAdminWhmsonic\myadmin_log()` as a no-op, it reports nothing at all and the
+     * assertion fails. Same plugin, same harness, opposite verdicts — the difference is
+     * entirely in whose function the call bound to.
+     *
+     * So the shadow is checked before the accusation is made, and the outcome becomes a skip
+     * that names the shadowing function. A skip says "this was not checked", which is true.
+     * The failure said "this handler is dead code", which was false.
+     *
+     * @param \MyAdmin\Plugins\Testing\Contract\PluginSubject $subject
+     * @return array<int,string>
+     */
+    public static function shadowedObservers(PluginSubject $subject)
+    {
+        $class = ltrim((string)$subject->pluginClass(), '\\');
+        $cut = strrpos($class, '\\');
+        if ($cut === false) {
+            return [];
+        }
+        $namespace = substr($class, 0, $cut);
+
+        $shadowed = [];
+        foreach (self::OBSERVER_FUNCTIONS as $name) {
+            $scoped = $namespace.'\\'.$name;
+            // Only a *shadow* counts: the global has to exist for there to be something to
+            // take the call away from. A namespaced helper with no global counterpart is
+            // just a function.
+            if (function_exists($scoped) && function_exists($name)) {
+                $shadowed[] = $scoped;
+            }
+        }
+        return $shadowed;
     }
 
     /**

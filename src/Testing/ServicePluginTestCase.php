@@ -455,6 +455,25 @@ abstract class ServicePluginTestCase extends PluginContractTestCase
             )];
         }
 
+        $shadowed = ServiceHandlerProbe::shadowedObservers($subject);
+        if ($shadowed !== []) {
+            return [Finding::skipped(
+                self::ASSERTION_ACTS,
+                sprintf(
+                    '%s::%s() could not be verified: this repo declares %s in the plugin\'s own'
+                    . ' namespace, and PHP binds an unqualified call to a namespaced function'
+                    . ' before the global one, so the handler\'s calls never reach the harness\'s'
+                    . ' recorders. No effect was observed, but none could have been. Removing the'
+                    . ' namespaced stub, or narrowing it to the tests that need it, makes this'
+                    . ' assertion able to run.',
+                    $subject->pluginClass(),
+                    $handler,
+                    implode(', ', $shadowed)
+                ),
+                array_merge($context, ['blockedBy' => 'namespaced observer stubs: '.implode(', ', $shadowed)])
+            )];
+        }
+
         return [Finding::failure(
             self::ASSERTION_ACTS,
             sprintf(

@@ -19,6 +19,7 @@ use Tests\MyAdmin\Plugins\Testing\Fixtures\SptcConfiguredPlugin;
 use Tests\MyAdmin\Plugins\Testing\Fixtures\SptcGatedPlugin;
 use Tests\MyAdmin\Plugins\Testing\Fixtures\SptcLeakyPlugin;
 use Tests\MyAdmin\Plugins\Testing\Fixtures\SptcTypedEventPlugin;
+use Tests\MyAdmin\Plugins\Testing\Fixtures\Shadowed\SptcShadowedPlugin;
 use Tests\MyAdmin\Plugins\Testing\Fixtures\SptcUngatedPlugin;
 
 /**
@@ -299,6 +300,69 @@ class ServicePluginTestCaseTest extends TestCase
      * @return void
      */
     public function testAHandlerThatMatchesItsOwnTypeAndDoesNothingFails()
+    {
+        $findings = $this->acts('getChangeIp');
+
+        $this->assertCount(1, $findings);
+        $this->assertTrue($findings[0]->isFailure(), $this->messages($findings));
+        $this->assertStringContainsString('changed nothing', $findings[0]->message());
+    }
+
+    /**
+     * The same handler, driven the same way, produced opposite verdicts depending on whether
+     * the repo's own `tests/bootstrap.php` had run first — and the failing one accused the
+     * plugin of being dead code.
+     *
+     * Measured on `myadmin-whmsonic-licensing`: standalone, `getActivate()` on WHMSONIC
+     * reports `myadmin_log (1)`, `service subject (1)` and passes. Under the repo's
+     * bootstrap, which loads a `tests/stubs.php` declaring
+     * `Detain\MyAdminWhmsonic\myadmin_log()` as a no-op, it reports nothing and assertion A
+     * failed with "changed nothing ... silently never gets provisioned". PHP binds an
+     * unqualified call to a namespaced function before the global one, so the handler acted
+     * and the harness simply could not see it. 5 service repos hit this.
+     *
+     * A skip is the honest outcome: it says the check could not run, which is true, instead
+     * of a defect claim that was false.
+     *
+     * @return void
+     */
+    public function testAShadowedObserverIsSkippedRatherThanCalledDeadCode()
+    {
+        SptcCase::$target = SptcShadowedPlugin::class;
+
+        try {
+            $findings = $this->acts('getActivate');
+
+            $this->assertCount(1, $findings);
+            $this->assertTrue(
+                $findings[0]->isSkipped(),
+                'a handler whose only observer is shadowed must not be reported as dead code: '
+                .$this->messages($findings)
+            );
+            $this->assertStringNotContainsString(
+                'changed nothing',
+                $findings[0]->message(),
+                'the false accusation must not survive as wording'
+            );
+            $this->assertArrayHasKey('blockedBy', $findings[0]->context(), 'a skip must say what blocked it');
+            $this->assertStringContainsString(
+                'myadmin_log',
+                $findings[0]->context()['blockedBy'],
+                'the skip has to name the shadowing function, or nobody can act on it'
+            );
+        } finally {
+            SptcCase::$target = SptcGatedPlugin::class;
+        }
+    }
+
+    /**
+     * The shadow check must not become a blanket excuse: it only applies when the plugin's
+     * own namespace has taken the observer over. A plugin that genuinely does nothing still
+     * fails.
+     *
+     * @return void
+     */
+    public function testAnUnshadowedPluginThatDoesNothingStillFails()
     {
         $findings = $this->acts('getChangeIp');
 
