@@ -38,9 +38,6 @@
 	"extra": {
 		"plugin-modifies-install-path": false,
 		"plugin-modifies-downloads": false,
-		"class": "MyAdmin\\Plugins\\Plugin",
-		"branch-alias": {
-			"dev-feature/plugin-contract-testcase": "9999999-dev"
-		}
+		"class": "MyAdmin\\Plugins\\Plugin"
 	}
 }
