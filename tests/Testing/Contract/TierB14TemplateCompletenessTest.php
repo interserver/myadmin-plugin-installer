@@ -4,6 +4,7 @@ namespace Tests\MyAdmin\Plugins\Testing\Contract;
 
 use MyAdmin\Plugins\Testing\Contract\Finding;
 use MyAdmin\Plugins\Testing\Contract\PluginSubject;
+use MyAdmin\Plugins\Testing\Contract\Path;
 use MyAdmin\Plugins\Testing\Contract\TierB14QueueActionScanner;
 use MyAdmin\Plugins\Testing\Contract\TierB14TemplateCompleteness;
 use PHPUnit\Framework\TestCase;
@@ -51,6 +52,14 @@ PHP;
         $this->originalCwd = (string)getcwd();
         $this->root = sys_get_temp_dir().'/tierb14_'.getmypid().'_'.uniqid();
         mkdir($this->root, 0777, true);
+
+        // Canonicalise. The inspector derives its answers from the reflected file name,
+        // which the runtime reports in canonical form, and it forward-slashes what it
+        // reports -- while on Windows sys_get_temp_dir() returns the 8.3 short form
+        // (C:\Users\RUNNER~1) with back-slashes, so an expectation built from the raw
+        // value could never match a correct result.
+        $real = realpath($this->root);
+        $this->root = Path::normalise($real === false ? $this->root : $real);
         $this->inspector = new TierB14TemplateCompleteness();
     }
 

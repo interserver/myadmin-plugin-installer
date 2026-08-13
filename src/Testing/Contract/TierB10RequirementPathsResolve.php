@@ -281,7 +281,7 @@ class TierB10RequirementPathsResolve implements PluginInspector
                 'no absolute requirement root could be determined (no requirementRoot(), no'
                     .' absolute INCLUDE_ROOT, and no <core>/include above the package), and the'
                     .' package could not be identified either — no readable composer.json naming'
-                    .' it at '.($subject->packageDir() === null ? '(unknown package directory)' : $subject->packageDir())
+                    .' it at '.($subject->packageDir() === null ? '(unknown package directory)' : $this->normalizeRoot($subject->packageDir()))
                     .' and it is not installed under a vendor/ directory, so sources pointing back'
                     .' into the package cannot be grounded on it',
                 ['plugin' => $subject->pluginClass()]
@@ -851,7 +851,14 @@ class TierB10RequirementPathsResolve implements PluginInspector
      */
     private function normalizeRoot($path)
     {
-        $trimmed = rtrim($path, '/\\');
-        return $trimmed === '' ? '/' : $trimmed;
+        $trimmed = rtrim((string)$path, '/\\');
+        if ($trimmed === '') {
+            return '/';
+        }
+        // Forward-slashed on every platform. A finding names a path an operator will paste
+        // somewhere, and on Windows the raw value arrives back-slashed from dirname() while
+        // everything this inspector appends to it is forward-slashed, so the message would
+        // otherwise carry both in one path.
+        return Path::normalise($trimmed);
     }
 }

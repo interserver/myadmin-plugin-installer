@@ -102,7 +102,10 @@ class TierB10RequirementPathsResolveTest extends TestCase
         // long one, so an expectation built from the raw value can never match a correct
         // result.
         $real = realpath($base);
-        return $real === false ? $base : $real;
+
+        // Forward-slashed, because that is the form the inspector reports and every
+        // expectation below is built by concatenating '/' onto this value.
+        return Path::normalise($real === false ? $base : $real);
     }
 
     /**
