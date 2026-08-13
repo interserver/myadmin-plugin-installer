@@ -60,6 +60,42 @@ vendor/bin/phpunit --filter testSupports    # single test
 
 Template routing to `data/templates/` or `include/templates/` was removed: it branched on the installer's own constructor type rather than the package's, so it was unreachable in every configuration. MyAdmin packages read templates in place via `__DIR__` and ship no web assets.
 
+## The plugin contract harness (`src/Testing/`)
+
+This package publishes the harness 69 plugin repos test themselves with. That makes
+`PluginContractTestCase` and `ServicePluginTestCase` a **published API**: renaming a protected
+hook, adding an abstract method, or making a data provider non-static breaks every consumer
+at once, delivered by a patch release, while this repo's own suite stays green.
+
+```bash
+vendor/bin/phpunit                       # this package
+./tools/fleet-test.sh --limit=5          # the fleet, against this working tree
+./tools/fleet-test.sh --verify-isolation # prove a planted break is actually detected
+php tools/fleet-repos.php --check        # is tools/fleet-repos.json stale?
+php tools/fleet-matrix.php --check       # is docs/phase2-triage-matrix.md stale?
+```
+
+- **`.github/workflows/fleet.yml`** runs the whole fleet weekly. Its gate is **new** red, not
+  red: 9 repos are already failing for reasons unrelated to this package, each listed with a
+  reason in `tools/fleet-baseline.json`. A baselined repo that starts *passing* also fails the
+  job, because a stale entry silently exempts a real regression.
+- **`tests/Testing/PublishedHarnessApiTest.php`** pins the shape of both base classes. When it
+  fails, decide whether the change is a rename/removal/new-abstract (major, and the fleet job
+  is what proves the regeneration) or a widening (minor) — do not edit the table to match.
+- **`symlink: false` on the fleet runner's path repository is load-bearing.** With the default
+  symlink every clone's `vendor/` points back at one source tree, so the run proves nothing
+  about the copy — silently, reading as a pass.
+- **PHPUnit needs both `--configuration` and a `cd` into the clone.** Given neither it
+  discovers the config in the working directory and runs *this* package's suite once per
+  plugin, reporting 69 passes that say nothing about any plugin.
+- **`src/Testing/Scaffold/ContractTestGenerator.php` is the source of truth for 66 committed
+  `ContractTest.php` files.** Change it and regenerate; a hand-edit in a plugin repo is
+  invisible to the next regeneration. `SkillDoc.php` is the same thing for the agent-facing
+  docs those repos carry.
+- **Three H-bugs have shipped, all the harness falsely accusing a plugin.** Suspect the
+  harness first when a verdict changes with how the suite was launched, or when a finding
+  fires on every package at once. Full detail: `docs/testing-harness.md`.
+
 ## Testing Patterns
 
 PHPUnit 9, config `phpunit.xml.dist`, bootstrap `vendor/autoload.php`.
