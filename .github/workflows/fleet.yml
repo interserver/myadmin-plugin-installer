@@ -1,0 +1,71 @@
+# Runs the whole plugin fleet against this repository's master.
+#
+# The tests.yml job proves this package is internally consistent. It cannot prove the thing
+# that actually breaks people: 69 other repositories extend these base classes, and a change
+# here that breaks them leaves this repo's own suite green. Without this job that breakage
+# ships in a tag and surfaces one repo at a time, days later, to someone who changed nothing.
+#
+# The gate is NEW red, not red. Nine repos are already failing for reasons unrelated to this
+# package -- owner-deferred production bugs and pre-existing suites, listed with a reason each
+# in tools/fleet-baseline.json. A job that went red on those every week would stop being read
+# by the second week.
+name: Fleet
+
+on:
+  schedule:
+    # Mondays, 06:17 UTC. Off the hour on purpose: the top of the hour is when GitHub's
+    # scheduler is most congested and cron jobs get delayed or dropped.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Comma-separated repo names, e.g. kvm-vps,ssl-module (blank = all)'
+        required: false
+        default: ''
+      verify_isolation:
+        description: 'Plant a deliberate break and assert the fleet notices it'
+        type: boolean
+        required: false
+        default: false
+
+# A second run against the same ref would clone 69 repos for nothing.
+concurrency:
+  group: fleet-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fleet:
+    runs-on: ubuntu-latest
+    # 69 clone + install + suite cycles. The default 360-minute cap would let a hung
+    # composer sit there for six hours before anyone found out.
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout the installer
+        uses: actions/checkout@v4
+        with:
+          # tools/fleet-test.sh derives the version it publishes into each clone from the
+          # nearest tag, and a shallow checkout has no tags to find.
+          fetch-depth: 0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, soap
+          coverage: none
+
+      - name: Run the fleet
+        run: |
+          args="--jobs=4"
+          if [ -n "${{ inputs.only }}" ]; then args="$args --only=${{ inputs.only }}"; fi
+          if [ "${{ inputs.verify_isolation }}" = "true" ]; then args="$args --verify-isolation"; fi
+          ./tools/fleet-test.sh $args --work="${{ runner.temp }}/fleet"
+
+      - name: Keep the logs when something went red
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fleet-logs
+          path: ${{ runner.temp }}/fleet/logs/
+          retention-days: 14

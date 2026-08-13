@@ -1,0 +1,354 @@
+{
+    "_comment": [
+        "The plugin fleet this harness is published to. Consumed by tools/fleet-test.sh and by the weekly fleet workflow.",
+        "Regenerate from a MyAdmin core checkout with: php tools/fleet-repos.php --write",
+        "myadmin-plugin-installer and myadmin-contracts are excluded: the first is this package, the second ships no plugin."
+    ],
+    "repos": [
+        {
+            "package": "detain/myadmin-abuse-plugin",
+            "repo": "myadmin-plugins/abuse-plugin",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-amazon-payments",
+            "repo": "myadmin-plugins/amazon-payments",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-authorizenet-payments",
+            "repo": "myadmin-plugins/authorizenet-payments",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-backups-module",
+            "repo": "myadmin-plugins/backups-module",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-cloudlinux-licensing",
+            "repo": "myadmin-plugins/cloudlinux-licensing",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-cpanel-licensing",
+            "repo": "myadmin-plugins/cpanel-licensing",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-cpanel-vps-addon",
+            "repo": "myadmin-plugins/cpanel-vps-addon",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-cpanel-webhosting",
+            "repo": "myadmin-plugins/cpanel-webhosting",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-directadmin-licensing",
+            "repo": "myadmin-plugins/directadmin-licensing",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-directadmin-storage",
+            "repo": "myadmin-plugins/directadmin-storage",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-directadmin-vps-addon",
+            "repo": "myadmin-plugins/directadmin-vps-addon",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-directadmin-webhosting",
+            "repo": "myadmin-plugins/directadmin-webhosting",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-docker-vps",
+            "repo": "myadmin-plugins/docker-vps",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-domains-module",
+            "repo": "myadmin-plugins/domains-module",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-drbl-backups",
+            "repo": "myadmin-plugins/drbl-backups",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-fantastico-licensing",
+            "repo": "myadmin-plugins/fantastico-licensing",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-fantastico-vps-addon",
+            "repo": "myadmin-plugins/fantastico-vps-addon",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-floating-ips-module",
+            "repo": "myadmin-plugins/myadmin-floating-ips-module",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-fraudrecord-plugin",
+            "repo": "myadmin-plugins/fraudrecord-plugin",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-globalsign-ssl",
+            "repo": "myadmin-plugins/globalsign-ssl",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-gluster-backups",
+            "repo": "myadmin-plugins/gluster-backups",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-google-analytics",
+            "repo": "myadmin-plugins/google-analytics",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-googlecheckout-payments",
+            "repo": "myadmin-plugins/googlecheckout-payments",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-googlewallet-payments",
+            "repo": "myadmin-plugins/googlewallet-payments",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-hd-vps-addon",
+            "repo": "myadmin-plugins/hd-vps-addon",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-hotjar-analytics",
+            "repo": "myadmin-plugins/hotjar-analytics",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-hyperv-vps",
+            "repo": "myadmin-plugins/hyperv-vps",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-icontact-mailinglist",
+            "repo": "myadmin-plugins/icontact-mailinglist",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-ip-webhosting-addon",
+            "repo": "myadmin-plugins/ip-webhosting-addon",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-ips-vps-addon",
+            "repo": "myadmin-plugins/ips-vps-addon",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-kayako-chat",
+            "repo": "myadmin-plugins/kayako-chat",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-kayako-support",
+            "repo": "myadmin-plugins/kayako-support",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-ksplice-licensing",
+            "repo": "myadmin-plugins/ksplice-licensing",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-kvm-vps",
+            "repo": "myadmin-plugins/kvm-vps",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-licenses-module",
+            "repo": "myadmin-plugins/licenses-module",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-litespeed-licensing",
+            "repo": "myadmin-plugins/litespeed-licensing",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-lxc-vps",
+            "repo": "myadmin-plugins/lxc-vps",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-mail-module",
+            "repo": "myadmin-plugins/mail-module",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-maxmind-plugin",
+            "repo": "myadmin-plugins/maxmind-plugin",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-modernbill-plugin",
+            "repo": "myadmin-plugins/modernbill-plugin",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-monitoring-plugin",
+            "repo": "myadmin-plugins/monitoring-plugin",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-novnc-plugin",
+            "repo": "myadmin-plugins/novnc-plugin",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-opensrs-domains",
+            "repo": "myadmin-plugins/opensrs-domains",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-openvz-vps",
+            "repo": "myadmin-plugins/openvz-vps",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-parallels-licensing",
+            "repo": "myadmin-plugins/parallels-licensing",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-patchman-licensing",
+            "repo": "myadmin-plugins/patchman-licensing",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-paypal-payments",
+            "repo": "myadmin-plugins/paypal-payments",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-payum-payments",
+            "repo": "myadmin-plugins/payum-payments",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-payza-payments",
+            "repo": "myadmin-plugins/payza-payments",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-piwik-analytics",
+            "repo": "myadmin-plugins/piwik-analytics",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-plesk-webhosting",
+            "repo": "myadmin-plugins/plesk-webhosting",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-pleskautomation-webhosting",
+            "repo": "myadmin-plugins/pleskautomation-webhosting",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-powerdns",
+            "repo": "myadmin-plugins/powerdns",
+            "branch": "adminlte"
+        },
+        {
+            "package": "detain/myadmin-quickservers-module",
+            "repo": "myadmin-plugins/quickservers-module",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-raid-backups",
+            "repo": "myadmin-plugins/raid-backups",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-sendy-mailinglist",
+            "repo": "myadmin-plugins/sendy-mailinglist",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-servers-module",
+            "repo": "myadmin-plugins/servers-module",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-slack-chat",
+            "repo": "myadmin-plugins/slack-chat",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-softaculous-licensing",
+            "repo": "myadmin-plugins/softaculous-licensing",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-softaculous-vps-addon",
+            "repo": "myadmin-plugins/softaculous-vps-addon",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-ssl-module",
+            "repo": "myadmin-plugins/ssl-module",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-swift-backups",
+            "repo": "myadmin-plugins/swift-backups",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-virtuozzo-vps",
+            "repo": "myadmin-plugins/virtuozzo-vps",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-vps-module",
+            "repo": "myadmin-plugins/vps-module",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-webhosting-module",
+            "repo": "myadmin-plugins/webhosting-module",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-webuzo-vps",
+            "repo": "myadmin-plugins/webuzo-vps",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-whmsonic-licensing",
+            "repo": "myadmin-plugins/whmsonic-licensing",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-xen-vps",
+            "repo": "myadmin-plugins/xen-vps",
+            "branch": "master"
+        },
+        {
+            "package": "detain/myadmin-zonemta-mail",
+            "repo": "myadmin-plugins/zonemta-mail",
+            "branch": "master"
+        }
+    ]
+}

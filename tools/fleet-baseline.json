@@ -1,0 +1,27 @@
+{
+  "_comment": [
+    "Repos whose suite is ALREADY red, independent of the installer. Verified by running the",
+    "same fleet against the released v2.2.1 on 2026-08-13 and getting an identical set.",
+    "",
+    "The weekly job fails on a repo that is red and NOT listed here -- that is the signal it",
+    "exists for. A repo listed here that goes GREEN is also reported, because the entry is then",
+    "stale and hiding a real gate.",
+    "",
+    "Each entry says what is wrong, so nobody has to re-derive it. Removing an entry is how a",
+    "fix is recorded; adding one needs a reason a reviewer can check.",
+    "",
+    "P-bug entries are tracked in docs/plugin-harness-findings.md in MyAdmin core and are",
+    "awaiting the owner's go-ahead per D7 -- each needs its own branch and review."
+  ],
+  "known_red": {
+    "cloudlinux-licensing": "S-1 getActivate()/getChangeIp() fatal, plus an A-7 hook-scoping failure. P-bug, unreviewed.",
+    "ips-vps-addon": "pre-existing PluginTest failure (a registered page file that does not ship), plus B-13/B-14.",
+    "mail-module": "pre-existing PluginTest suite is red -- 39 errors, all in the package's own tests, not the contract ones.",
+    "plesk-webhosting": "P-2: getChangeIp()/getDeactivate()/getDeactivateIp() fatal. Owner-deferred.",
+    "virtuozzo-vps": "pre-existing PluginTest suite is red -- 52 errors in the package's own tests.",
+    "vps-module": "R10: pre-existing ApiFunctionsTest drift, recorded at G0 before any harness change. Plus B-11/B-13/B-16.",
+    "webhosting-module": "B-11/B-13/B-16 findings, unreviewed.",
+    "xen-vps": "P-1: getDeactivate()/getReactivate()/getDeactivateIp() fatal. Owner-deferred.",
+    "zonemta-mail": "S-1 lifecycle handlers fatal, plus B-16. Unreviewed."
+  }
+}
