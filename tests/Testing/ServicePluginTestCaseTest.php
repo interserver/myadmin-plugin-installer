@@ -372,6 +372,48 @@ class ServicePluginTestCaseTest extends TestCase
     }
 
     /**
+     * A missing *file* is the same "harness ran out of road" fact as a missing *symbol*, but
+     * PHP raises it as a warning rather than an Error, so it landed in the failure branch and
+     * was described as the handler failing on its own logic.
+     *
+     * Measured on `myadmin-fantastico-licensing`: getChangeIp() requires
+     * `workerman/statistics/.../StatisticClient.php`, which exists in a MyAdmin checkout and
+     * not in the plugin repo's vendor tree.
+     *
+     * @return void
+     */
+    public function testAFailedRequireIsAnEnvironmentLimitRatherThanAPluginDefect()
+    {
+        $warning = new \PHPUnit\Framework\Error\Warning(
+            'require_once(/x/vendor/workerman/statistics/Clients/StatisticClient.php):'
+            .' Failed to open stream: No such file or directory',
+            0,
+            __FILE__,
+            __LINE__
+        );
+
+        $this->assertTrue(
+            ServiceHandlerProbe::isUnresolvableDependency($warning),
+            'a require of a file this environment lacks is not the plugin failing'
+        );
+    }
+
+    /**
+     * The file check must not swallow a genuine defect that merely mentions a path.
+     *
+     * @return void
+     */
+    public function testAnOrdinaryThrowIsStillTheHandlersOwnLogic()
+    {
+        $this->assertFalse(
+            ServiceHandlerProbe::isUnresolvableDependency(
+                new \RuntimeException('could not write /var/log/app.log')
+            ),
+            'an exception naming a path is not a failed include'
+        );
+    }
+
+    /**
      * 17 of the fleet's 84 gated handlers die on a symbol the harness cannot provide. Calling
      * those a pass would claim a check that never ran.
      *

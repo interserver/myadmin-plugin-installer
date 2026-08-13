@@ -209,6 +209,25 @@ class ServiceHandlerProbe
     const UNRESOLVABLE_CLASS = '/^(Class|Interface|Trait|Enum) "[^"]*" not found$/';
 
     /**
+     * A `require`/`include` of a file this environment does not have.
+     *
+     * The same "the harness ran out of road" fact as {@see UNRESOLVABLE}, arriving as a
+     * different PHP type. A missing *symbol* raises `Error`; a missing *file* raises a
+     * warning, which PHPUnit's error handler converts into `PHPUnit\Framework\Error\Warning`
+     * — not an `Error` — so it fell through to the failure branch and was described as "the
+     * handler failed on its own logic and cannot be doing its job in production either".
+     *
+     * Measured on `myadmin-fantastico-licensing`: `getChangeIp()` reaches a `require_once`
+     * of `workerman/statistics/.../StatisticClient.php`, which exists in a MyAdmin checkout
+     * and not in the plugin repo's own vendor tree. The handler is fine; the file is
+     * somewhere this process cannot see. Calling that a production defect is exactly the
+     * false accusation the shadow check was added to stop.
+     *
+     * @var string
+     */
+    const UNRESOLVABLE_FILE = '/(require|include)(_once)?\(.*\).*Failed to open stream/i';
+
+    /**
      * Everything known about one handler's type gate.
      *
      * @param \MyAdmin\Plugins\Testing\Contract\PluginSubject $subject
@@ -730,6 +749,12 @@ class ServiceHandlerProbe
      */
     public static function isUnresolvableDependency(Throwable $error)
     {
+        // Checked before the \Error gate on purpose: a failed require arrives as a warning,
+        // so requiring \Error first would skip this and let the failure branch describe a
+        // missing file as the plugin's own logic failing.
+        if (preg_match(self::UNRESOLVABLE_FILE, $error->getMessage())) {
+            return true;
+        }
         if (!$error instanceof \Error) {
             return false;
         }
