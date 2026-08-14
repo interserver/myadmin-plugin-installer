@@ -10,6 +10,7 @@ namespace Tests\MyAdmin\Plugins\Testing;
 
 use MyAdmin\Plugins\Testing\Contract\Finding;
 use MyAdmin\Plugins\Testing\Harness;
+use MyAdmin\Plugins\Testing\Contract\PluginSubject;
 use MyAdmin\Plugins\Testing\ServiceHandlerProbe;
 use MyAdmin\Plugins\Testing\ServiceLifecycleEvent;
 use MyAdmin\Plugins\Testing\ServicePluginTestCase;
@@ -20,6 +21,7 @@ use Tests\MyAdmin\Plugins\Testing\Fixtures\SptcGatedPlugin;
 use Tests\MyAdmin\Plugins\Testing\Fixtures\SptcLeakyPlugin;
 use Tests\MyAdmin\Plugins\Testing\Fixtures\SptcTypedEventPlugin;
 use Tests\MyAdmin\Plugins\Testing\Fixtures\Shadowed\SptcShadowedPlugin;
+use Tests\MyAdmin\Plugins\Testing\Fixtures\ShadowedGate\SptcShadowedGatePlugin;
 use Tests\MyAdmin\Plugins\Testing\Fixtures\SptcUngatedPlugin;
 
 /**
@@ -326,6 +328,136 @@ class ServicePluginTestCaseTest extends TestCase
      *
      * @return void
      */
+    /**
+     * D-7, and the mirror image of the test below.
+     *
+     * On assertion A an unreachable recorder produced a false ACCUSATION, which is loud. On
+     * assertion B the same blindness produces a false CLEAN BILL, which is silent — "it touched
+     * nothing" is read off exactly the recorders the shadow makes unreachable. A handler that
+     * acted on every service type in the fleet would have passed this assertion in the 8 repos
+     * that declare namespaced stubs.
+     *
+     * The verdict is a notice rather than a skip on purpose: the check ran, and two of its three
+     * sub-assertions (stopPropagation, throw) are observed directly and did hold. Only "touched
+     * nothing" is unverified, and the plugin has done nothing wrong — so the suite stays green
+     * and merely stops claiming it verified something it could not see.
+     *
+     * @return void
+     */
+    /**
+     * The same false accusation as H-1, arriving through the gate rather than the observers.
+     *
+     * Every service handler in this fleet opens with
+     * `if ($event['category'] == get_service_define('X'))`. A repo that redefines
+     * `get_service_define()` in the plugin's own namespace -- whmsonic-licensing returns a
+     * fixed literal so its own tests can seed it -- makes that comparison fail, so the body
+     * never runs and nothing is observed. S-1 called that dead code whose service "silently
+     * never gets provisioned".
+     *
+     * The two shadows were hiding each other: this only became reachable once the observer
+     * shadow was cleared, and clearing it turned a silent pass into a loud false accusation.
+     *
+     * @return void
+     */
+    public function testABrokenGateIsSkippedRatherThanCalledDeadCode()
+    {
+        SptcCase::$target = SptcShadowedGatePlugin::class;
+
+        try {
+            $findings = $this->acts('getActivate');
+
+            $this->assertCount(1, $findings);
+            $this->assertTrue(
+                $findings[0]->isSkipped(),
+                'a handler whose gate the test broke must not be reported as dead code: '
+                .$this->messages($findings)
+            );
+            $this->assertStringNotContainsString(
+                'silently never gets provisioned',
+                $findings[0]->message(),
+                'the false accusation must not survive as wording'
+            );
+            $this->assertStringContainsString(
+                'get_service_define',
+                $findings[0]->message(),
+                'the skip has to name the declaration responsible'
+            );
+        } finally {
+            SptcCase::$target = null;
+        }
+    }
+
+    /**
+     * A namespaced get_service_define() that AGREES with the global is not a problem, and
+     * repos are entitled to declare one. Detecting by existence rather than by comparison
+     * would make this warning permanent and therefore ignored.
+     *
+     * @return void
+     */
+    public function testAnAgreeingGateRedefinitionIsNotTreatedAsAShadow()
+    {
+        $this->assertNull(
+            ServiceHandlerProbe::shadowedGate(
+                new PluginSubject(SptcGatedPlugin::class),
+                ['LICENSES_TYPE']
+            ),
+            'a plugin with no namespaced get_service_define() must never be reported as gated-out'
+        );
+    }
+
+    public function testAnInertVerdictIsNotClaimedWhenTheObserverIsShadowed()
+    {
+        SptcCase::$target = SptcShadowedPlugin::class;
+
+        try {
+            $findings = $this->inert('getActivate');
+
+            $this->assertCount(1, $findings);
+            $this->assertFalse(
+                $findings[0]->isFailure(),
+                'the plugin is not at fault for its own test stubs: '.$this->messages($findings)
+            );
+            $this->assertTrue(
+                $findings[0]->isNotice(),
+                'an unverifiable inert verdict must be a notice, not a silent pass: '
+                .$this->messages($findings)
+            );
+            $this->assertStringContainsString(
+                'not the same as verified inert',
+                $findings[0]->message(),
+                'the notice has to say what was NOT established'
+            );
+            $this->assertStringContainsString(
+                'myadmin_log',
+                $findings[0]->message(),
+                'and name the declaration responsible, or it cannot be acted on'
+            );
+        } finally {
+            SptcCase::$target = null;
+        }
+    }
+
+    /**
+     * The safeguard must not swallow the assertion. A genuinely inert handler, with observers
+     * the harness can actually reach, still passes outright — no notice, no finding.
+     *
+     * @return void
+     */
+    public function testAGenuinelyInertHandlerStillPassesWithNoFindingAtAll()
+    {
+        SptcCase::$target = SptcGatedPlugin::class;
+
+        try {
+            $this->assertSame(
+                [],
+                $this->inert('getActivate'),
+                'a gated handler with reachable observers must pass cleanly, not merely quietly'
+            );
+        } finally {
+            SptcCase::$target = null;
+        }
+    }
+
     public function testAShadowedObserverIsSkippedRatherThanCalledDeadCode()
     {
         SptcCase::$target = SptcShadowedPlugin::class;

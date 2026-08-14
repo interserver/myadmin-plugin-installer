@@ -118,4 +118,29 @@ class Log
     {
         self::$entries = [];
     }
+
+    /**
+     * Drops every entry logged under one section, leaving the rest untouched.
+     *
+     * Exists for probes that have to write in order to find something out --
+     * {@see ServiceHandlerProbe::forwardsToObserver()} calls a plugin's namespaced
+     * `myadmin_log()` to discover whether it forwards here. `reset()` would be wrong for
+     * that: it would also discard whatever the harness had legitimately observed, and the
+     * assertions that read this recorder would then report the plugin did nothing.
+     *
+     * @param string $section
+     * @return int how many entries were removed
+     */
+    public static function forget($section)
+    {
+        $before = count(self::$entries);
+        self::$entries = array_values(array_filter(
+            self::$entries,
+            function (array $entry) use ($section) {
+                return !isset($entry['section']) || $entry['section'] !== $section;
+            }
+        ));
+
+        return $before - count(self::$entries);
+    }
 }

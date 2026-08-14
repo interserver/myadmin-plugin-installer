@@ -171,6 +171,9 @@ class ServiceHandlerProbe
      */
     const OBSERVER_FUNCTIONS = ['myadmin_log', 'make_insert_query', 'dialog', 'add_output'];
 
+    /** Section name the forwarding probe logs under, so it can be removed again. */
+    const FORWARD_PROBE_SECTION = '__contract_forward_probe__';
+
     /**
      * Throwable messages that mean "this environment cannot supply a symbol the handler
      * needs", as opposed to "the handler is broken".
@@ -808,11 +811,119 @@ class ServiceHandlerProbe
             // Only a *shadow* counts: the global has to exist for there to be something to
             // take the call away from. A namespaced helper with no global counterpart is
             // just a function.
-            if (function_exists($scoped) && function_exists($name)) {
-                $shadowed[] = $scoped;
+            if (!function_exists($scoped) || !function_exists($name)) {
+                continue;
             }
+            if (self::forwardsToObserver($scoped)) {
+                continue;
+            }
+            $shadowed[] = $scoped;
         }
         return $shadowed;
+    }
+
+    /**
+     * Whether the plugin's own namespace redefines `get_service_define()` incompatibly.
+     *
+     * ---------------------------------------------------------------------------------
+     * WHY THE GATE MATTERS AS MUCH AS THE OBSERVERS
+     * ---------------------------------------------------------------------------------
+     * Every service handler in this fleet opens with the same shape:
+     *
+     * ```php
+     * if ($event['category'] == get_service_define('WHMSONIC')) { ...do the work... }
+     * ```
+     *
+     * The harness seeds `$event['category']` from its own `get_service_define()`. If the
+     * plugin's namespace declares a different one — `myadmin-whmsonic-licensing` returns the
+     * fixed string `'WHMSONIC_TYPE'` so its own tests can seed that literal — the comparison
+     * fails, the body never runs, and **the handler does nothing for reasons that have
+     * nothing to do with the handler**.
+     *
+     * S-1 then reports "ran to completion and changed nothing … the service it is meant to
+     * provision silently never gets provisioned", which is false. It is the same false
+     * accusation as H-1, arriving through the gate rather than through the observers, and it
+     * only surfaced once the observer shadow was cleared — the two were hiding each other.
+     *
+     * Detected by comparison rather than by existence: a namespaced `get_service_define()`
+     * that agrees with the global is not a problem, and repos are entitled to declare one.
+     *
+     * @param \MyAdmin\Plugins\Testing\Contract\PluginSubject $subject
+     * @param array<int,string>                              $defines the types this handler gates on
+     * @return string|null the shadowing declaration, or null when the gate is sound
+     */
+    public static function shadowedGate(PluginSubject $subject, array $defines)
+    {
+        $class = ltrim((string)$subject->pluginClass(), '\\');
+        $cut = strrpos($class, '\\');
+        if ($cut === false || $defines === []) {
+            return null;
+        }
+        $scoped = substr($class, 0, $cut).'\\get_service_define';
+        if (!function_exists($scoped) || !function_exists('get_service_define')) {
+            return null;
+        }
+
+        foreach ($defines as $define) {
+            try {
+                if ($scoped($define) != \get_service_define($define)) {
+                    return $scoped;
+                }
+            } catch (Throwable $e) {
+                return $scoped;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Whether a namespaced declaration passes the call on to the harness's observer.
+     *
+     * ---------------------------------------------------------------------------------
+     * WHY EXISTENCE IS NOT THE QUESTION
+     * ---------------------------------------------------------------------------------
+     * The first version of this check reported a shadow whenever both a namespaced and a
+     * global declaration existed. That is the right *shape* and the wrong *question*: a repo
+     * told to fix its stub by forwarding into the harness — which is exactly the advice the
+     * skip and the S-2 notice give — then forwards, and is still reported as shadowed. The
+     * warning becomes permanent, unactionable, and therefore ignored, which is worse than not
+     * having it.
+     *
+     * So the shadow is measured by calling it. A canary through the namespaced function that
+     * arrives at the recorder means the call is not being taken away from anyone.
+     *
+     * Only `myadmin_log` is probed: it is the observer every service handler in this fleet
+     * actually calls, it is side-effect-free here (the recorder is a fake), and its arguments
+     * are uniform. The other three would each need a bespoke, less benign probe to answer a
+     * question that in practice they never raise alone.
+     *
+     * @param string $scoped fully-qualified namespaced function name
+     * @return bool
+     */
+    private static function forwardsToObserver($scoped)
+    {
+        if (substr($scoped, -strlen('\\myadmin_log')) !== '\\myadmin_log') {
+            // Not probeable; fall back to treating the declaration as a shadow, which is the
+            // conservative answer -- it understates what was verified rather than overstating.
+            return false;
+        }
+
+        $before = Log::count();
+        try {
+            $scoped(self::FORWARD_PROBE_SECTION, 'debug', 'contract harness observer probe', 0, __FILE__);
+        } catch (Throwable $e) {
+            return false;
+        }
+        $heard = Log::count() > $before;
+
+        if ($heard) {
+            // Remove the canary, or it becomes an "effect" the very assertions this supports
+            // are about to read.
+            Log::forget(self::FORWARD_PROBE_SECTION);
+        }
+
+        return $heard;
     }
 
     /**

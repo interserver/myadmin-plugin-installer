@@ -455,6 +455,27 @@ abstract class ServicePluginTestCase extends PluginContractTestCase
             )];
         }
 
+        $shadowedGate = ServiceHandlerProbe::shadowedGate($subject, $gate['defines']);
+        if ($shadowedGate !== null) {
+            return [Finding::skipped(
+                self::ASSERTION_ACTS,
+                sprintf(
+                    '%s::%s() could not be verified: this repo declares %s() in the plugin\'s own'
+                    . ' namespace and it disagrees with the harness about %s, so the handler\'s'
+                    . ' own `if ($event[\'%s\'] == get_service_define(...))` gate never matched and'
+                    . ' the body never ran. Nothing was observed because nothing executed -- which'
+                    . ' says nothing about the handler. Narrowing that stub, or making it agree'
+                    . ' with the global, makes this assertion able to run.',
+                    $subject->pluginClass(),
+                    $handler,
+                    $shadowedGate,
+                    implode('/', $gate['defines']),
+                    $gate['key']
+                ),
+                array_merge($context, ['blockedBy' => 'shadowed gate: '.$shadowedGate.'()'])
+            )];
+        }
+
         $shadowed = ServiceHandlerProbe::shadowedObservers($subject);
         if ($shadowed !== []) {
             return [Finding::skipped(
@@ -615,6 +636,63 @@ abstract class ServicePluginTestCase extends PluginContractTestCase
                     $run['error']->getMessage()
                 ),
                 array_merge($context, ['exception' => get_class($run['error'])])
+            );
+        }
+
+        // D-7. Everything above reached a verdict from something the harness can always see --
+        // stopPropagation() and a thrown exception are observed directly. "It touched nothing"
+        // is different: it is read off the effect recorders, and in the repos that declare
+        // no-op helpers inside the plugin's own namespace those recorders are unreachable. PHP
+        // binds an unqualified call to a namespaced function before the global one, so the
+        // handler's myadmin_log() never arrives.
+        //
+        // H-1 fixed the mirror image of this on S-1, where an empty recorder was read as proof
+        // the handler was dead. Here an empty recorder is the *passing* answer, so the same
+        // blindness produces a green tick instead of a false accusation -- quieter, and worse:
+        // a handler that acts on every service type in the fleet would pass this assertion.
+        //
+        // Reported as a NOTICE rather than a skip because the check genuinely ran and two of
+        // its three sub-assertions hold; only "touched nothing" is unverified. A notice keeps
+        // the suite green -- the plugin has done nothing wrong -- while removing the claim that
+        // anything was verified.
+        $shadowedGate = ServiceHandlerProbe::shadowedGate($subject, $gate['defines']);
+        if ($shadowedGate !== null) {
+            return Finding::notice(
+                self::ASSERTION_INERT,
+                sprintf(
+                    '%s::%s() was not observed to act on service type %s, which it does not own --'
+                    . ' but this repo declares %s() in the plugin\'s own namespace and it disagrees'
+                    . ' with the harness, so the handler\'s gate could not have matched for ANY'
+                    . ' type. Inertness that follows from a gate the test broke is not evidence of'
+                    . ' inertness. Making that stub agree with the global makes the assertion real.',
+                    $subject->pluginClass(),
+                    $handler,
+                    $value,
+                    $shadowedGate
+                ),
+                array_merge($context, ['unverifiedBy' => 'shadowed gate: '.$shadowedGate.'()'])
+            );
+        }
+
+        $shadowed = ServiceHandlerProbe::shadowedObservers($subject);
+        if ($shadowed !== []) {
+            return Finding::notice(
+                self::ASSERTION_INERT,
+                sprintf(
+                    '%s::%s() neither stopped propagation nor threw for service type %s, which it'
+                    . ' does not own — but whether it TOUCHED anything could not be observed: this'
+                    . ' repo declares %s in the plugin\'s own namespace, and PHP binds an'
+                    . ' unqualified call to a namespaced function before the global one, so the'
+                    . ' handler\'s calls never reach the harness\'s recorders. Inert as far as'
+                    . ' this could see, which is not the same as verified inert. Narrowing that'
+                    . ' stub to the tests that need it, or forwarding it into the harness, makes'
+                    . ' the assertion real.',
+                    $subject->pluginClass(),
+                    $handler,
+                    $value,
+                    implode(', ', $shadowed)
+                ),
+                array_merge($context, ['unverifiedBy' => 'namespaced observer stubs: '.implode(', ', $shadowed)])
             );
         }
 
