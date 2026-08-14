@@ -72,17 +72,27 @@ class FleetManifestTest extends TestCase
     }
 
     /**
-     * `powerdns` is on `adminlte`. A runner that assumed master everywhere would report it as
-     * clone_failed every week, and the week it started genuinely failing would look the same.
+     * The branch is recorded per repo rather than assumed, because it has already been wrong
+     * once: `powerdns` lived on `adminlte` until 2026-08-13, and a runner that assumed master
+     * would have reported it as clone_failed every week — indistinguishable from the week it
+     * started genuinely failing. It is on `master` now, and the field stays.
+     *
+     * The generator reads the *default* branch from the remote, never the local checkout's
+     * HEAD: a working copy sitting on a fix branch would otherwise rewrite the manifest to
+     * test that branch forever.
      */
-    public function testTheBranchIsRecordedPerRepoRatherThanAssumed(): void
+    public function testEveryRepoRecordsAnExplicitBranch(): void
     {
-        $branches = [];
         foreach ($this->manifest()['repos'] as $entry) {
-            $branches[$entry['repo']] = $entry['branch'];
+            $this->assertNotSame('', $entry['branch'], $entry['repo'].' has no branch recorded');
+            $this->assertStringNotContainsString(
+                '/',
+                $entry['branch'],
+                $entry['repo'].' is pinned to "'.$entry['branch'].'", which looks like a topic'
+                    .' branch — the weekly job would report on work-in-progress as though it were'
+                    .' the default branch'
+            );
         }
-
-        $this->assertSame('adminlte', $branches['myadmin-plugins/powerdns'] ?? null);
     }
 
     public function testTheManifestHasNoDuplicates(): void

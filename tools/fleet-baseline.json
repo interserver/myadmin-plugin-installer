@@ -17,12 +17,12 @@
     "awaiting the owner's go-ahead per D7 -- each needs its own branch and review."
   ],
   "known_red": {
-    "cloudlinux-licensing": "S-1 getActivate()/getChangeIp() fatal, plus an A-7 hook-scoping failure. P-bug, unreviewed.",
+    "cloudlinux-licensing": "FIXED on branch remove/undispatched-install-hooks (PR #2) -- D-2 hooks removed, D-3 xml_rpc2 forked. Remove this entry when that merges.",
     "ips-vps-addon": "pre-existing PluginTest failure (a registered page file that does not ship), plus B-13/B-14.",
     "mail-module": "pre-existing PluginTest suite is red -- 39 errors, all in the package's own tests, not the contract ones.",
-    "plesk-webhosting": "P-2: getChangeIp()/getDeactivate()/getDeactivateIp() fatal. Owner-deferred.",
+    "plesk-webhosting": "P-2 FIXED on branch fix/changeip-plesk-constructor (PR #2). Remove this entry when that merges.",
     "virtuozzo-vps": "pre-existing PluginTest suite is red -- 52 errors in the package's own tests.",
-    "webhosting-module": "B-11/B-13/B-16 findings, unreviewed.",
-    "xen-vps": "P-1: getDeactivate()/getReactivate()/getDeactivateIp() fatal. Owner-deferred."
+    "webhosting-module": "FIXED on branch feat/register-webhosting-api (PR #2) -- the two api.php functions are now registered. Remove this entry when that merges.",
+    "xen-vps": "P-1 FIXED on branch fix/deactivate-use-before-assign (PR #2). Remove this entry when that merges."
   }
 }

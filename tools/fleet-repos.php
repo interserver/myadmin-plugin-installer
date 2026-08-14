@@ -63,7 +63,7 @@ foreach (glob($vendor.'/myadmin-*', GLOB_ONLYDIR) as $dir) {
     $repos[] = [
         'package' => isset($manifest['name']) ? $manifest['name'] : $name,
         'repo' => $slug,
-        'branch' => trim((string)shell_exec('git -C '.escapeshellarg($dir).' rev-parse --abbrev-ref HEAD')),
+        'branch' => defaultBranch($dir),
     ];
 }
 
@@ -97,3 +97,35 @@ if ($write) {
 }
 
 echo $json;
+
+/**
+ * The branch the fleet job should clone, which is the repo's DEFAULT branch.
+ *
+ * Deliberately not `rev-parse --abbrev-ref HEAD`. These are working checkouts: one sitting on
+ * a fix branch during a review would silently rewrite the manifest to test that branch
+ * forever, and the weekly job would report on work-in-progress as though it were master. The
+ * remote's own HEAD is the only answer that does not depend on what someone was doing here.
+ *
+ * @param string $dir
+ * @return string
+ */
+function defaultBranch($dir)
+{
+    foreach (['composer', 'origin'] as $remote) {
+        $ref = trim((string)shell_exec(
+            'git -C '.escapeshellarg($dir).' symbolic-ref --short refs/remotes/'.$remote.'/HEAD 2>/dev/null'
+        ));
+        if ($ref !== '') {
+            return substr($ref, strlen($remote) + 1);
+        }
+        // No local HEAD ref for that remote yet -- ask it.
+        $shown = (string)shell_exec(
+            'git -C '.escapeshellarg($dir).' remote show '.escapeshellarg($remote).' 2>/dev/null'
+        );
+        if (preg_match('/HEAD branch:\s*(\S+)/', $shown, $found) && $found[1] !== '(unknown)') {
+            return $found[1];
+        }
+    }
+
+    return trim((string)shell_exec('git -C '.escapeshellarg($dir).' rev-parse --abbrev-ref HEAD'));
+}

@@ -268,7 +268,7 @@
         {
             "package": "detain/myadmin-powerdns",
             "repo": "myadmin-plugins/powerdns",
-            "branch": "adminlte"
+            "branch": "master"
         },
         {
             "package": "detain/myadmin-quickservers-module",
