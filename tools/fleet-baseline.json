@@ -5,7 +5,10 @@
     "",
     "The weekly job fails on a repo that is red and NOT listed here -- that is the signal it",
     "exists for. A repo listed here that goes GREEN is also reported, because the entry is then",
-    "stale and hiding a real gate.",
+    "stale and hiding a real gate. That report is not theoretical: vps-module and zonemta-mail",
+    "were baselined on 2026-08-13 and removed the same day once H-4 was fixed -- both had been",
+    "red because the harness could not hear their api_register() calls, not because of anything",
+    "wrong with them.",
     "",
     "Each entry says what is wrong, so nobody has to re-derive it. Removing an entry is how a",
     "fix is recorded; adding one needs a reason a reviewer can check.",
@@ -19,9 +22,7 @@
     "mail-module": "pre-existing PluginTest suite is red -- 39 errors, all in the package's own tests, not the contract ones.",
     "plesk-webhosting": "P-2: getChangeIp()/getDeactivate()/getDeactivateIp() fatal. Owner-deferred.",
     "virtuozzo-vps": "pre-existing PluginTest suite is red -- 52 errors in the package's own tests.",
-    "vps-module": "R10: pre-existing ApiFunctionsTest drift, recorded at G0 before any harness change. Plus B-11/B-13/B-16.",
     "webhosting-module": "B-11/B-13/B-16 findings, unreviewed.",
-    "xen-vps": "P-1: getDeactivate()/getReactivate()/getDeactivateIp() fatal. Owner-deferred.",
-    "zonemta-mail": "S-1 lifecycle handlers fatal, plus B-16. Unreviewed."
+    "xen-vps": "P-1: getDeactivate()/getReactivate()/getDeactivateIp() fatal. Owner-deferred."
   }
 }

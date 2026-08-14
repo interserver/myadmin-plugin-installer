@@ -106,6 +106,25 @@ class TierB16ApiRegisterExecute implements PluginInspector
     const HOOK = 'api.register';
 
     /**
+     * Canary name for the registrar probe. Deliberately unusable as a real API type, so a
+     * probe that somehow survives {@see shadowedRegistrar()}'s reset is obvious rather than
+     * plausible.
+     */
+    const PROBE_NAME = '__myadmin_contract_probe__';
+
+    /**
+     * The three globals a handler may register through, with probe arguments matching each
+     * one's real signature in `include/Api/api.functions.inc.php`.
+     *
+     * @var array<string, array<int, mixed>>
+     */
+    const REGISTRARS = [
+        'api_register_array' => [self::PROBE_NAME, ['probe' => 'string']],
+        'api_register_array_array' => [self::PROBE_NAME, self::PROBE_NAME],
+        'api_register' => [self::PROBE_NAME, [], ['return' => 'string'], 'contract probe'],
+    ];
+
+    /**
      * @return string
      */
     public function id()
@@ -228,6 +247,14 @@ class TierB16ApiRegisterExecute implements PluginInspector
         }
 
         if ($registrations === 0) {
+            // "Registered nothing" and "we could not see what it registered" produce an
+            // identical empty recorder, and only one of them is the plugin's fault. Prove the
+            // channel works before making the accusation — see shadowedRegistrar().
+            $shadow = $this->shadowedRegistrar();
+            if ($shadow !== null) {
+                SubjectEvent::releaseHarness();
+                return [$shadow($subject)];
+            }
             $reachable = $this->reachability($subject);
             SubjectEvent::releaseHarness();
             if ($reachable instanceof Finding) {
@@ -466,6 +493,112 @@ class TierB16ApiRegisterExecute implements PluginInspector
         }
 
         return $this->orphaned($subject, $index['hooks']);
+    }
+
+    /**
+     * Whether `api_register()` actually reaches this inspector's recorder.
+     *
+     * ---------------------------------------------------------------------------------
+     * THE BUG THIS EXISTS TO PREVENT (H-4)
+     * ---------------------------------------------------------------------------------
+     * The harness declares its `api_register*()` globals in `src/Testing/stubs.php`, each
+     * behind `if (!function_exists(...))`. A plugin repo whose own `tests/bootstrap.php`
+     * declares the same globals — behind the same guard, for the same reason — wins purely by
+     * running first, because PHP cannot redeclare a function. Every `api_register()` call the
+     * handler makes then lands in the *repo's* no-op instead of the recorder, the recorder
+     * stays empty, and the inspector concludes the plugin registered nothing.
+     *
+     * `vps-module` declares those stubs at `tests/bootstrap.php:236` and registers **30** API
+     * calls; `zonemta-mail` declares one at `:177` and registers one. Both were reported as
+     * registering nothing, and both reports were false. Neither shows up when the suite runs
+     * inside a MyAdmin checkout, because there the harness's stub is reached first — the same
+     * "verdict depends on how the suite was launched" signature as H-1 and H-2.
+     *
+     * ---------------------------------------------------------------------------------
+     * WHY A LIVE PROBE RATHER THAN A REFLECTION CHECK
+     * ---------------------------------------------------------------------------------
+     * H-1 detects its shadow by reflecting on where the function was declared. That works for
+     * the case it was written for — a helper declared inside the plugin's own namespace — and
+     * would miss this one, where the declaration is global and in a file the inspector has no
+     * reason to know about. Calling the registrar and asking the recorder whether it heard
+     * anything is indifferent to *how* the call was intercepted, which is the property worth
+     * having: the next interception mechanism does not need a third detector.
+     *
+     * RETURNS: null when the channel is sound · otherwise a callable producing the skip.
+     *
+     * @return callable|null
+     */
+    private function shadowedRegistrar()
+    {
+        $api = Harness::api();
+        $shadowed = [];
+
+        // All three, not just one. A repo shadowing only api_register() -- zonemta-mail
+        // declares exactly that and nothing else -- would sail past a probe that tested only
+        // api_register_array(), and the accusation would be made anyway. The handler is free
+        // to use any of the three, so any one of them being deaf makes an empty recorder
+        // uninterpretable.
+        foreach (self::REGISTRARS as $registrar => $probeArgs) {
+            if (!function_exists($registrar)) {
+                continue;
+            }
+            $before = $api->registrationCount();
+            $registrar(...$probeArgs);
+            if ($api->registrationCount() === $before) {
+                $shadowed[] = $registrar.'()'.$this->declarationSite($registrar);
+            }
+        }
+
+        // Drop the probes either way. Leaving them behind would make an otherwise-empty
+        // surface look populated, turning this safeguard into the false verdict it prevents.
+        $api->reset();
+
+        if ($shadowed === []) {
+            return null;
+        }
+
+        $declaredIn = implode('; ', $shadowed);
+
+        return function (PluginSubject $subject) use ($declaredIn) {
+            return Finding::skipped(
+                self::ID,
+                $subject->pluginClass().'::'.self::METHOD.'() ran, but this check could not'
+                    .' observe what it registered. The global registrar in effect is not the'
+                    .' harness forwarder, so its calls never reach the recorder: '.$declaredIn
+                    .'. PHP cannot redeclare a function, and the harness declares its own behind'
+                    .' function_exists(), so whichever file loads first wins. This is reported as'
+                    .' a skip rather than a failure because an empty recorder here says nothing'
+                    .' about the plugin — it may register a great deal. To restore the assertion,'
+                    .' have that stub forward into MyAdmin\\Plugins\\Testing\\Harness::api()'
+                    .' instead of discarding its arguments.',
+                [
+                    'class'      => $subject->pluginClass(),
+                    'method'     => self::METHOD,
+                    'blockedBy'  => 'shadowed api registrar',
+                    'declaredIn' => $declaredIn,
+                ]
+            );
+        };
+    }
+
+    /**
+     * Where a global function was declared, phrased for the middle of a sentence.
+     *
+     * @param string $function
+     * @return string
+     */
+    private function declarationSite($function)
+    {
+        try {
+            $reflected = new \ReflectionFunction($function);
+            $file = (string)$reflected->getFileName();
+            if ($file === '') {
+                return ' an internal or dynamically-defined function';
+            }
+            return ' declared at '.$file.':'.$reflected->getStartLine();
+        } catch (\ReflectionException $e) {
+            return ' of unknown origin';
+        }
     }
 
     /**

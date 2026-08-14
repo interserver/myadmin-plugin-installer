@@ -334,6 +334,34 @@ class TierB16SpyApi extends \MyAdmin\Plugins\Testing\Fakes\FakeApi
  * @covers \MyAdmin\Plugins\Testing\Contract\TierB16ApiRegisterExecute
  * @covers \MyAdmin\Plugins\Testing\Fakes\FakeApi
  */
+/**
+ * A sink that hears nothing.
+ *
+ * This is what a shadowed registrar looks like from the recorder's side, and the side is the
+ * only thing the probe can see. The real mechanism -- a plugin repo's `tests/bootstrap.php`
+ * declaring `api_register()` before the harness gets to -- cannot be staged inside this
+ * process, because the harness's own stubs are already declared by the time any test runs and
+ * PHP will not let either of us redeclare. What *can* be staged is the consequence, which is
+ * the thing the inspector actually reasons about: calls go somewhere, and the recorder stays
+ * empty. Verified against the real mechanism in the fleet: vps-module (30 registrations) and
+ * zonemta-mail (1) were both reported as registering nothing before this check existed.
+ */
+class TierB16DeafApi extends \MyAdmin\Plugins\Testing\Fakes\FakeApi
+{
+    public function api_register($function, $input, $output, $label = '', $logged_in = true, $wrap = true)
+    {
+        // Swallowed, exactly as a repo's no-op stub swallows it.
+    }
+
+    public function api_register_array($function, $data)
+    {
+    }
+
+    public function api_register_array_array($arraysName, $targetArray)
+    {
+    }
+}
+
 class TierB16ApiRegisterExecuteTest extends TestCase
 {
     /** @var TierB16ApiRegisterExecute */
@@ -673,4 +701,80 @@ class TierB16ApiRegisterExecuteTest extends TestCase
         $this->assertSame(0, $api->registrationCount());
         $this->assertSame([], $api->calls(), 'reset drops the call log too');
     }
+
+    /**
+     * H-4. Before this check, an empty recorder was reported as "the plugin registered
+     * nothing" — the same accusation whether the plugin registered nothing or the harness
+     * could not hear it. Two packages in the fleet were accused wrongly, and both accusations
+     * only appeared when the suite ran from the plugin repo rather than from a MyAdmin
+     * checkout, which is the signature this class of bug keeps producing.
+     *
+     * @return void
+     */
+    public function testADeafRegistrarProducesASkipRatherThanAnAccusation(): void
+    {
+        Harness::set('api', new TierB16DeafApi());
+
+        $findings = $this->inspect(TierB16GoodPlugin::class);
+
+        $this->assertCount(1, $findings);
+        $this->assertTrue($findings[0]->isSkipped(), $this->describe($findings));
+        $this->assertStringNotContainsString('registered no API calls', $this->describe($findings));
+        $this->assertStringContainsString('could not observe what it registered', $this->describe($findings));
+    }
+
+    /**
+     * The skip has to name the file, or the reader is told their build is unverifiable and
+     * given nothing to act on.
+     *
+     * @return void
+     */
+    public function testTheSkipNamesWhereTheShadowingDeclarationLives(): void
+    {
+        Harness::set('api', new TierB16DeafApi());
+
+        $described = $this->describe($this->inspect(TierB16GoodPlugin::class));
+
+        $this->assertStringContainsString('api_register', $described);
+        $this->assertStringContainsString('declared at', $described);
+        $this->assertStringContainsString('Harness::api()', $described, 'it must say how to fix it');
+    }
+
+    /**
+     * The safeguard must not become the false verdict it prevents. The probe registers a
+     * canary through each registrar; if one were left behind, a genuinely empty surface would
+     * look populated and assertion 2 would pass for every package in the fleet.
+     *
+     * @return void
+     */
+    public function testTheProbeLeavesNothingBehindInTheRecorder(): void
+    {
+        $findings = $this->inspect(TierB16EmptyPlugin::class);
+
+        $this->assertStringNotContainsString(
+            TierB16ApiRegisterExecute::PROBE_NAME,
+            $this->describe($findings),
+            'the probe canary leaked into the reported surface'
+        );
+        $this->assertSame(
+            0,
+            Harness::api()->registrationCount(),
+            'the probe must not survive its own check'
+        );
+    }
+
+    /**
+     * And the safeguard must not swallow the finding it was carved out of: a plugin that
+     * genuinely registers nothing, with a registrar that genuinely works, still fails.
+     *
+     * @return void
+     */
+    public function testAWorkingRegistrarStillFailsAPluginThatRegistersNothing(): void
+    {
+        $findings = $this->inspect(TierB16EmptyPlugin::class);
+
+        $this->assertTrue($findings[0]->isFailure(), $this->describe($findings));
+        $this->assertStringContainsString('registered no API calls', $this->describe($findings));
+    }
+
 }
