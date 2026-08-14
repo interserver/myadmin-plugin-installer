@@ -1,28 +1,24 @@
 {
   "_comment": [
-    "Repos whose suite is ALREADY red, independent of the installer. Verified by running the",
-    "same fleet against the released v2.2.1 on 2026-08-13 and getting an identical set.",
+    "Repos whose suite is ALREADY red for reasons unrelated to this package.",
     "",
-    "The weekly job fails on a repo that is red and NOT listed here -- that is the signal it",
-    "exists for. A repo listed here that goes GREEN is also reported, because the entry is then",
-    "stale and hiding a real gate. That report is not theoretical: vps-module and zonemta-mail",
-    "were baselined on 2026-08-13 and removed the same day once H-4 was fixed -- both had been",
-    "red because the harness could not hear their api_register() calls, not because of anything",
-    "wrong with them.",
+    "EMPTY as of 2026-08-13. Every entry that was here has been fixed rather than exempted:",
+    "  xen-vps             P-1, a use-before-assign that made deactivation fatal",
+    "  plesk-webhosting    P-2, wrong constructor arity AND the wrong server's credentials",
+    "  cloudlinux-licensing  D-2 undispatched hooks removed, D-3 xml_rpc2 taken from our fork",
+    "  webhosting-module   two API functions published that had never been registered",
+    "  mail-module         PRORATE_BILLING primed so its own Plugin class can load",
+    "  virtuozzo-vps       the harness App stand-in installed so the suite runs standalone",
+    "  ips-vps-addon       a test that asserted on its checkout directory, not its package",
     "",
-    "Each entry says what is wrong, so nobody has to re-derive it. Removing an entry is how a",
-    "fix is recorded; adding one needs a reason a reviewer can check.",
+    "The weekly job fails on ANY repo that is red. Adding an entry here needs a reason a",
+    "reviewer can check, and it should be rare -- an exemption is a decision to ship a known",
+    "defect, not a way to quiet a build.",
     "",
-    "P-bug entries are tracked in docs/plugin-harness-findings.md in MyAdmin core and are",
-    "awaiting the owner's go-ahead per D7 -- each needs its own branch and review."
+    "A repo listed here that goes GREEN is also reported, because a stale entry silently",
+    "exempts a real regression. That report is what caught six of the seven above.",
+    "",
+    "P-bugs and owner decisions are tracked in docs/plugin-harness-findings.md in MyAdmin core."
   ],
-  "known_red": {
-    "cloudlinux-licensing": "FIXED on branch remove/undispatched-install-hooks (PR #2) -- D-2 hooks removed, D-3 xml_rpc2 forked. Remove this entry when that merges.",
-    "ips-vps-addon": "pre-existing PluginTest failure (a registered page file that does not ship), plus B-13/B-14.",
-    "mail-module": "pre-existing PluginTest suite is red -- 39 errors, all in the package's own tests, not the contract ones.",
-    "plesk-webhosting": "P-2 FIXED on branch fix/changeip-plesk-constructor (PR #2). Remove this entry when that merges.",
-    "virtuozzo-vps": "pre-existing PluginTest suite is red -- 52 errors in the package's own tests.",
-    "webhosting-module": "FIXED on branch feat/register-webhosting-api (PR #2) -- the two api.php functions are now registered. Remove this entry when that merges.",
-    "xen-vps": "P-1 FIXED on branch fix/deactivate-use-before-assign (PR #2). Remove this entry when that merges."
-  }
+  "known_red": {}
 }

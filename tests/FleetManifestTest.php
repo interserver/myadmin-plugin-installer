@@ -115,7 +115,16 @@ class FleetManifestTest extends TestCase
             $known[] = substr($entry['repo'], strrpos($entry['repo'], '/') + 1);
         }
 
-        foreach (array_keys($this->baseline()['known_red']) as $repo) {
+        $exempt = array_keys($this->baseline()['known_red']);
+        // An empty baseline is the goal state, not a gap in the test: every entry that ever
+        // lived here was fixed rather than exempted. Asserted explicitly so this stays a real
+        // assertion rather than a loop over nothing, which PHPUnit rightly calls risky.
+        if ($exempt === []) {
+            $this->assertSame([], $exempt, 'no repo is exempt, which is the state to keep');
+            return;
+        }
+
+        foreach ($exempt as $repo) {
             $this->assertContains(
                 $repo,
                 $known,
@@ -130,7 +139,13 @@ class FleetManifestTest extends TestCase
      */
     public function testEveryExemptionSaysWhy(): void
     {
-        foreach ($this->baseline()['known_red'] as $repo => $reason) {
+        $exempt = $this->baseline()['known_red'];
+        if ($exempt === []) {
+            $this->assertSame([], $exempt, 'nothing is exempt, so there is no reason to demand');
+            return;
+        }
+
+        foreach ($exempt as $repo => $reason) {
             $this->assertGreaterThan(
                 30,
                 strlen((string)$reason),
