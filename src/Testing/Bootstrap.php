@@ -9,6 +9,8 @@
 namespace MyAdmin\Plugins\Testing;
 
 use MyAdmin\Plugins\Testing\Fakes\FakeApp;
+use MyAdmin\Plugins\Testing\Fakes\FakeSecretFlags;
+use MyAdmin\Plugins\Testing\Fakes\FakeServiceSecrets;
 
 /**
  * One call sets up everything a plugin needs to have its handlers actually
@@ -110,6 +112,7 @@ class Bootstrap
 
         // 2. FakeApp must exist before any plugin code or module wiring runs.
         self::installApp();
+        self::installSecrets();
 
         // 3. Global stubs — get_module_db()'s fallback path calls myadmin_log().
         self::loadStubs();
@@ -167,6 +170,24 @@ class Bootstrap
         self::installTestContainerBuilder();
         self::$appInstalled = true;
         return true;
+    }
+
+    /**
+     * Aliases {@see FakeServiceSecrets} and {@see FakeSecretFlags} to core's
+     * `\MyAdmin\Security\ServiceSecrets` and `\MyAdmin\Security\SecretFlags`
+     * (SecretBox, MyAdmin plan_2way), so plugin code that reads a stored secret
+     * through them runs in a plugin's own tests. Each name is left alone when a
+     * real class answers to it (a core bootstrap), exactly like installApp().
+     *
+     * @return array<string,bool> name => whether this call installed it
+     */
+    public static function installSecrets()
+    {
+        $installed = [];
+        foreach (['MyAdmin\Security\ServiceSecrets' => FakeServiceSecrets::class, 'MyAdmin\Security\SecretFlags' => FakeSecretFlags::class] as $name => $fake) {
+            $installed[$name] = !class_exists($name) && class_alias($fake, $name);
+        }
+        return $installed;
     }
 
     /**

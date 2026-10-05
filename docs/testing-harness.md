@@ -197,6 +197,19 @@ warning and returns false, and every plugin's `phpunit.xml.dist` sets
 
 ---
 
+### 2.9 SecretBox stand-ins (v2.6.0)
+
+MyAdmin core seals service secrets with SecretBox (core `plan_2way.md`). Plugin code reads a stored
+secret through core's static `\MyAdmin\Security\ServiceSecrets::readColumn()` / `readHistoryRow()`
+and writes through `updateValue()` / `insertValue()` / `sealAfterInsert()` / `historyUpdateValue()`,
+and asks `\MyAdmin\Security\SecretFlags`. Neither class exists in a plugin's vendor tree, so
+`Bootstrap::init()` aliases `Fakes\FakeServiceSecrets` and `Fakes\FakeSecretFlags` to those names
+(`Bootstrap::installSecrets()`, only when no real class answers). They model production today:
+every write flag off, plaintext data, readers and writers return what they are given, no query.
+Core's flag-independent input rule (`rejectInput()`, at most 128 bytes, not `S<digit>.`) is copied.
+An envelope in test data, or anything on `FakeApp::secrets()` / `secretBox()`, throws: plugin tests
+must carry plaintext.
+
 ## 3. Things that will bite you
 
 ### 3.1 Constants are immutable — plan for it up front

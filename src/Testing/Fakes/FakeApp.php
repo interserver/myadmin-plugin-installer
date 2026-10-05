@@ -221,6 +221,29 @@ class FakeApp
     }
 
     /**
+     * SecretBox service (MyAdmin plan_2way). Plugin tests carry plaintext and
+     * every write flag is off, so nothing legitimate reaches the instance: any
+     * method called on it throws. The static readers plugins use live on
+     * {@see FakeServiceSecrets}.
+     *
+     * @return \MyAdmin\Plugins\Testing\Fakes\FakeServiceSecrets
+     */
+    public static function secrets()
+    {
+        self::log(__FUNCTION__, []);
+        return new FakeServiceSecrets();
+    }
+
+    /**
+     * @return \MyAdmin\Plugins\Testing\Fakes\FakeServiceSecrets same refusal as secrets()
+     */
+    public static function secretBox()
+    {
+        self::log(__FUNCTION__, []);
+        return new FakeServiceSecrets();
+    }
+
+    /**
      * 130 fleet references.
      *
      * @return \MyAdmin\Plugins\Testing\Fakes\FakeHistory
